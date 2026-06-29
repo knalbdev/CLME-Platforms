@@ -36,7 +36,7 @@ export function getAllUsers(): User[] {
 
 export const DEMO_ACCOUNTS = [
   { role: 'peserta'  as UserRole, label: 'Peserta',        emoji: '👩‍🏫', email: 'sari@clme.id',       password: 'peserta123' },
-  { role: 'ahli'     as UserRole, label: 'Ahli Validasi',  emoji: '🔬', email: 'prof.ahmad@clme.id', password: 'ahli123'    },
+  { role: 'ahli'     as UserRole, label: 'Fasilitator',     emoji: '🤝', email: 'prof.ahmad@clme.id', password: 'ahli123'    },
   { role: 'peneliti' as UserRole, label: 'Peneliti',       emoji: '📊', email: 'yudi@clme.id',       password: 'peneliti123'},
   { role: 'admin'    as UserRole, label: 'Administrator',  emoji: '⚙️', email: 'admin@clme.id',      password: 'admin123'   },
 ]

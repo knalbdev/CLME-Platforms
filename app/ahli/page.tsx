@@ -2,93 +2,147 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSession, logout, getAllUsers } from '@/lib/auth'
-import { getModules, getDiscussions } from '@/lib/data'
+import { getDiscussions } from '@/lib/data'
 import { getProgress } from '@/lib/gamification'
-import type { User, Module, Discussion } from '@/types'
+import type { User, Discussion } from '@/types'
 
-type Section = 'dashboard' | 'peserta' | 'konten' | 'diskusi' | 'umpan-balik'
+type Section = 'dashboard' | 'keterlibatan' | 'jadwal' | 'catatan' | 'diskusi' | 'laporan'
+type NoteCategory = 'aktivitas' | 'kendala' | 'temuan' | 'rekomendasi'
 
-interface ContentItem {
+interface FieldNote {
   id: string
-  module: string
-  title: string
-  type: string
-  status: 'draft' | 'review' | 'approved'
-  notes: string
+  date: string
+  category: NoteCategory
+  body: string
+  location: string
 }
 
-const INITIAL_CONTENT: ContentItem[] = [
-  { id: 'c1', module: 'Modul 1', title: 'Kenapa Kata Sandi Penting?', type: 'Membaca', status: 'approved', notes: 'Konten sudah sesuai standar NIST SP 800-63B.' },
-  { id: 'c2', module: 'Modul 1', title: 'Anatomi Kata Sandi Kuat', type: 'Interaktif', status: 'approved', notes: 'Tabel perbandingan perlu pembaruan referensi.' },
-  { id: 'c3', module: 'Modul 1', title: 'Etika Berbagi Kata Sandi', type: 'Skenario', status: 'review', notes: 'Skenario terlalu sederhana untuk guru SMK.' },
-  { id: 'c4', module: 'Modul 2', title: 'Ancaman Email di Sekolah', type: 'Membaca', status: 'approved', notes: 'Referensi Permenkominfo sudah sesuai.' },
-  { id: 'c5', module: 'Modul 2', title: 'Anatomi Phishing Email', type: 'Interaktif', status: 'review', notes: 'Perlu tambahan contoh domain .sch.id.' },
-  { id: 'c6', module: 'Modul 3', title: 'Jenis-Jenis Insiden Siber', type: 'Membaca', status: 'draft', notes: 'Menunggu validasi konten dari BSSN.' },
+interface ScheduleEvent {
+  id: string
+  title: string
+  date: string
+  time: string
+  peserta: string[]
+  note: string
+  done: boolean
+}
+
+const CAT_COLORS: Record<NoteCategory, string> = {
+  aktivitas: 'bg-sky-100 text-sky-700 border-sky-200',
+  kendala:   'bg-red-100 text-red-700 border-red-200',
+  temuan:    'bg-amber-100 text-amber-700 border-amber-200',
+  rekomendasi: 'bg-primary-100 text-primary-700 border-primary-200',
+}
+const CAT_LABELS: Record<NoteCategory, string> = {
+  aktivitas: 'Aktivitas', kendala: 'Kendala', temuan: 'Temuan', rekomendasi: 'Rekomendasi',
+}
+
+const INITIAL_NOTES: FieldNote[] = [
+  { id: 'n1', date: '2026-06-20', category: 'aktivitas', body: 'Sesi pertama berjalan lancar. Semua peserta berhasil login ke platform dan menyelesaikan orientasi modul.', location: 'Lab Komputer SMP Negeri 1 Bandung' },
+  { id: 'n2', date: '2026-06-22', category: 'kendala', body: 'Budi mengalami kesulitan koneksi internet saat mengerjakan Modul 2. Perlu koordinasi dengan pihak sekolah untuk memperbaiki jaringan.', location: 'SMAN 5 Bandung' },
+  { id: 'n3', date: '2026-06-25', category: 'temuan', body: 'Peserta paling antusias saat mengikuti simulasi phishing. Sebagian besar belum pernah melihat contoh email phishing nyata sebelumnya.', location: 'SMPN 3 Bandung' },
 ]
 
-const FEEDBACK_DATA = [
-  { id: 'f1', peserta: 'Sari Rahayu, S.Pd.', sekolah: 'SMP Negeri 1 Bandung', modul: 'Modul 1', relevance: 4, clarity: 5, applicability: 4, comment: 'Materi sangat relevan dengan kebutuhan sehari-hari guru. Skenario kehilangan HP sangat bisa terjadi.' },
-  { id: 'f2', peserta: 'Budi Hartono, M.Pd.', sekolah: 'SMAN 5 Bandung', modul: 'Modul 1', relevance: 5, clarity: 4, applicability: 5, comment: 'Simulasi phishing sangat membantu untuk meningkatkan kewaspadaan. Saya akan bagikan ke rekan guru.' },
-  { id: 'f3', peserta: 'Rini Wulandari, S.Pd.', sekolah: 'SMPN 3 Bandung', modul: 'Modul 2', relevance: 4, clarity: 4, applicability: 3, comment: 'Beberapa istilah teknis perlu dijelaskan lebih sederhana untuk guru non-IT.' },
+const INITIAL_SCHEDULE: ScheduleEvent[] = [
+  { id: 's1', title: 'Sesi Pendampingan Modul 3', date: '2026-07-02', time: '09:00', peserta: ['Sari Rahayu', 'Budi Hartono', 'Rini Wulandari'], note: 'Ingatkan peserta untuk menyelesaikan pre-test sebelum sesi dimulai', done: false },
+  { id: 's2', title: 'Check-in Progress Peserta', date: '2026-07-05', time: '14:00', peserta: ['Sari Rahayu', 'Rini Wulandari'], note: 'Fokus pada peserta yang belum menyelesaikan Modul 2', done: false },
+  { id: 's3', title: 'Rapat Koordinasi Fasilitator', date: '2026-06-15', time: '10:00', peserta: ['Semua Peserta'], note: '', done: true },
 ]
 
-export default function AhliPage() {
+const LAST_ACTIVE_DAYS: Record<string, number> = { P001: 0, P002: 2, P003: 5 }
+
+export default function FasilitatorPage() {
   const router = useRouter()
   const [section, setSection] = useState<Section>('dashboard')
   const [session, setSession] = useState<User | null>(null)
-  const [modules, setModules] = useState<Module[]>([])
-  const [discussions, setDiscussions] = useState<Discussion[]>([])
   const [pesertaList, setPesertaList] = useState<User[]>([])
-  const [content, setContent] = useState<ContentItem[]>(INITIAL_CONTENT)
-  const [replyInputs, setReplyInputs] = useState<Record<string, string>>({})
+  const [discussions, setDiscussions] = useState<Discussion[]>([])
+  const [notes, setNotes] = useState<FieldNote[]>(INITIAL_NOTES)
+  const [schedule, setSchedule] = useState<ScheduleEvent[]>(INITIAL_SCHEDULE)
+
+  const [showNoteForm, setShowNoteForm] = useState(false)
+  const [noteForm, setNoteForm] = useState<{ category: NoteCategory; body: string; location: string }>({
+    category: 'aktivitas', body: '', location: '',
+  })
+
+  const [reminderTarget, setReminderTarget] = useState('')
+  const [reminderMsg, setReminderMsg] = useState('')
+  const [remindersSent, setRemindersSent] = useState<{ id: string; to: string; msg: string; time: string }[]>([])
+
+  const [reportForm, setReportForm] = useState({ period: '', highlights: '', obstacles: '', recommendation: '', nextPlan: '' })
+  const [sentReports, setSentReports] = useState<{ id: string; period: string; sentAt: string }[]>([])
+
+  const [saveMsg, setSaveMsg] = useState('')
+
+  const flash = (msg: string) => { setSaveMsg(msg); setTimeout(() => setSaveMsg(''), 3000) }
 
   useEffect(() => {
     const s = getSession()
     if (!s || s.role !== 'ahli') { router.push('/'); return }
     setSession(s)
-    setModules(getModules())
     setDiscussions(getDiscussions())
-    const all = getAllUsers().filter(u => u.role === 'peserta')
-    setPesertaList(all)
+    setPesertaList(getAllUsers().filter(u => u.role === 'peserta'))
   }, [router])
 
   const handleLogout = () => { logout(); router.push('/') }
 
-  const handleStatusChange = (id: string, status: ContentItem['status']) => {
-    setContent(prev => prev.map(c => c.id === id ? { ...c, status } : c))
+  const getLastActiveDays = (userId: string) => LAST_ACTIVE_DAYS[userId] ?? 1
+  const getLastActiveLabel = (userId: string) => {
+    const days = getLastActiveDays(userId)
+    const d = new Date()
+    d.setDate(d.getDate() - days)
+    return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+  }
+  const needsFollowUp = (userId: string) => getLastActiveDays(userId) >= 3
+
+  const progresses = pesertaList.map(u => ({ user: u, progress: getProgress(u.id) }))
+  const avgXP = progresses.length ? Math.round(progresses.reduce((s, p) => s + p.progress.xp, 0) / progresses.length) : 0
+  const activeCount = progresses.filter(p => !needsFollowUp(p.user.id)).length
+  const followUpCount = progresses.filter(p => needsFollowUp(p.user.id)).length
+
+  const handleAddNote = () => {
+    if (!noteForm.body.trim()) return
+    const n: FieldNote = {
+      id: `n_${Date.now()}`,
+      date: new Date().toISOString().split('T')[0],
+      category: noteForm.category,
+      body: noteForm.body.trim(),
+      location: noteForm.location.trim() || 'Tidak disebutkan',
+    }
+    setNotes(prev => [n, ...prev])
+    setNoteForm({ category: 'aktivitas', body: '', location: '' })
+    setShowNoteForm(false)
+    flash('Catatan lapangan berhasil disimpan.')
   }
 
-  const handleNoteChange = (id: string, notes: string) => {
-    setContent(prev => prev.map(c => c.id === id ? { ...c, notes } : c))
+  const handleSendReminder = () => {
+    if (!reminderTarget || !reminderMsg.trim()) return
+    const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) +
+      ', ' + new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
+    setRemindersSent(prev => [{ id: `r_${Date.now()}`, to: reminderTarget, msg: reminderMsg.trim(), time }, ...prev])
+    setReminderTarget('')
+    setReminderMsg('')
+    flash('Pengingat berhasil dikirim.')
   }
 
-  const handleReply = (discId: string) => {
-    const text = replyInputs[discId]?.trim()
-    if (!text || !session) return
-    alert(`Balasan dikirim: "${text}"`)
-    setReplyInputs(prev => ({ ...prev, [discId]: '' }))
+  const handleSendReport = () => {
+    if (!reportForm.highlights.trim()) return
+    setSentReports(prev => [{
+      id: `rep_${Date.now()}`,
+      period: reportForm.period || 'Periode tidak disebutkan',
+      sentAt: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+    }, ...prev])
+    setReportForm({ period: '', highlights: '', obstacles: '', recommendation: '', nextPlan: '' })
+    flash('Laporan berhasil dikirim ke Peneliti.')
   }
-
-  const statusColors: Record<ContentItem['status'], string> = {
-    draft: 'bg-slate-100 text-slate-600',
-    review: 'bg-amber-100 text-amber-700',
-    approved: 'bg-primary-100 text-primary-700',
-  }
-  const statusLabels: Record<ContentItem['status'], string> = {
-    draft: 'Draft', review: 'Review', approved: 'Disetujui',
-  }
-
-  const getProgresses = () => pesertaList.map(u => {
-    const p = getProgress(u.id)
-    return { user: u, progress: p }
-  })
 
   const navItems: { id: Section; label: string; emoji: string }[] = [
-    { id: 'dashboard', label: 'Dashboard', emoji: '📊' },
-    { id: 'peserta', label: 'Data Peserta', emoji: '👥' },
-    { id: 'konten', label: 'Validasi Konten', emoji: '✅' },
-    { id: 'diskusi', label: 'Moderasi Diskusi', emoji: '💬' },
-    { id: 'umpan-balik', label: 'Umpan Balik', emoji: '📋' },
+    { id: 'dashboard',    label: 'Dasbor Program',        emoji: '📊' },
+    { id: 'keterlibatan', label: 'Keterlibatan Peserta',   emoji: '👥' },
+    { id: 'jadwal',       label: 'Jadwal & Reminder',      emoji: '📅' },
+    { id: 'catatan',      label: 'Catatan Lapangan',       emoji: '📝' },
+    { id: 'diskusi',      label: 'Forum Diskusi',          emoji: '💬' },
+    { id: 'laporan',      label: 'Laporan ke Peneliti',    emoji: '📤' },
   ]
 
   if (!session) {
@@ -99,64 +153,76 @@ export default function AhliPage() {
     )
   }
 
-  const progresses = getProgresses()
-  const avgXP = progresses.length ? Math.round(progresses.reduce((s, p) => s + p.progress.xp, 0) / progresses.length) : 0
-  const avgLessons = progresses.length ? Math.round(progresses.reduce((s, p) => s + p.progress.done.length, 0) / progresses.length) : 0
-  const approvedCount = content.filter(c => c.status === 'approved').length
-
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      {/* Sidebar */}
-      <aside className="w-60 bg-white border-r border-slate-100 flex flex-col shadow-sm flex-none">
-        <div className="p-5 border-b border-slate-100">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white font-bold text-xs">🛡️</div>
+      {/* ── Sidebar ─────────────────────────────────── */}
+      <aside className="w-64 bg-white border-r border-slate-100 flex flex-col shadow-sm flex-none">
+        <div className="px-5 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white">🛡️</div>
             <div>
-              <p className="text-sm font-black text-slate-900">CLME</p>
-              <p className="text-[10px] text-slate-400 font-medium">Ahli Validasi</p>
+              <p className="text-sm font-black text-slate-900 leading-none">CLME</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Fasilitator</p>
             </div>
           </div>
         </div>
-        <nav className="flex-1 p-3">
+
+        <nav className="flex-1 p-3 space-y-0.5">
           {navItems.map(n => (
             <button key={n.id} onClick={() => setSection(n.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl mb-1 text-sm font-medium transition text-left ${section === n.id ? 'bg-primary-50 text-primary-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
-              <span>{n.emoji}</span> {n.label}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left ${
+                section === n.id
+                  ? 'bg-primary-600 text-white shadow-sm shadow-primary-200'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+              }`}>
+              <span className="text-base leading-none">{n.emoji}</span>
+              <span className="leading-none">{n.label}</span>
             </button>
           ))}
         </nav>
+
         <div className="p-4 border-t border-slate-100">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">{session.avatar}</div>
+            <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-xs font-black text-primary-700 flex-none">{session.avatar}</div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-slate-800 truncate">{session.name}</p>
               <p className="text-[10px] text-slate-400 truncate">{session.institution}</p>
             </div>
           </div>
-          <button onClick={handleLogout} className="w-full text-xs text-slate-500 hover:text-red-600 py-1.5 rounded-lg border border-slate-200 hover:border-red-200 transition">Keluar</button>
+          <button onClick={handleLogout} className="w-full text-xs text-slate-500 hover:text-red-600 py-1.5 rounded-lg border border-slate-200 hover:border-red-200 transition">
+            Keluar
+          </button>
         </div>
       </aside>
 
-      {/* Main */}
+      {/* ── Main ────────────────────────────────────── */}
       <main className="flex-1 overflow-y-auto">
         <div className="p-6 max-w-5xl mx-auto">
 
-          {/* DASHBOARD */}
+          {saveMsg && (
+            <div className="mb-4 bg-primary-50 border border-primary-200 text-primary-700 text-sm px-4 py-3 rounded-xl flex items-center gap-2">
+              ✅ {saveMsg}
+            </div>
+          )}
+
+          {/* ── DASBOR ─────────────────────────────── */}
           {section === 'dashboard' && (
             <div>
               <div className="mb-6">
-                <h1 className="text-2xl font-black text-slate-900">Selamat Datang, {session.name.split(',')[0]} 👋</h1>
-                <p className="text-slate-500 text-sm mt-1">Panel Ahli Validasi — CLME Platform · {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                <h1 className="text-2xl font-black text-slate-900">Dasbor Program</h1>
+                <p className="text-slate-500 text-sm mt-1">
+                  Koordinasi lapangan · {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                </p>
               </div>
 
               <div className="grid grid-cols-4 gap-4 mb-6">
                 {[
-                  { label: 'Total Peserta', val: pesertaList.length, emoji: '👥', color: 'bg-blue-50 border-blue-100' },
-                  { label: 'Konten Disetujui', val: `${approvedCount}/${content.length}`, emoji: '✅', color: 'bg-primary-50 border-primary-100' },
-                  { label: 'Rata-rata XP', val: avgXP, emoji: '⭐', color: 'bg-amber-50 border-amber-100' },
-                  { label: 'Diskusi Aktif', val: discussions.length, emoji: '💬', color: 'bg-violet-50 border-violet-100' },
+                  { label: 'Total Peserta',    val: pesertaList.length, emoji: '👥', border: 'border-blue-100',    bg: 'bg-blue-50' },
+                  { label: 'Peserta Aktif',    val: activeCount,        emoji: '✅', border: 'border-primary-100', bg: 'bg-primary-50' },
+                  { label: 'Perlu Follow-up',  val: followUpCount,      emoji: '⚠️', border: 'border-amber-100',   bg: 'bg-amber-50' },
+                  { label: 'Catatan Lapangan', val: notes.length,       emoji: '📝', border: 'border-violet-100',  bg: 'bg-violet-50' },
                 ].map(s => (
-                  <div key={s.label} className={`${s.color} border rounded-2xl p-4 shadow-sm`}>
+                  <div key={s.label} className={`${s.bg} border ${s.border} rounded-2xl p-4 shadow-sm`}>
                     <div className="text-2xl mb-1">{s.emoji}</div>
                     <div className="text-2xl font-black text-slate-900">{s.val}</div>
                     <div className="text-xs text-slate-500 mt-0.5 font-medium">{s.label}</div>
@@ -164,68 +230,82 @@ export default function AhliPage() {
                 ))}
               </div>
 
-              {/* Progress charts */}
               <div className="grid grid-cols-2 gap-4 mb-4">
+                {/* Follow-up list */}
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                  <h3 className="text-sm font-bold text-slate-800 mb-4">Progress Peserta (XP)</h3>
-                  <div className="space-y-3">
-                    {progresses.map(({ user, progress }) => (
-                      <div key={user.id}>
-                        <div className="flex justify-between text-xs text-slate-600 mb-1">
-                          <span className="font-medium truncate">{user.name.split(',')[0]}</span>
-                          <span className="font-bold text-primary-600 flex-none ml-2">{progress.xp} XP</span>
+                  <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                    <span className="w-1.5 h-4 rounded-full bg-amber-400 inline-block" />
+                    Perlu Follow-up
+                  </h3>
+                  {followUpCount === 0 ? (
+                    <p className="text-xs text-slate-400 italic">Semua peserta aktif dalam 3 hari terakhir.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {progresses.filter(p => needsFollowUp(p.user.id)).map(({ user }) => (
+                        <div key={user.id} className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-xl p-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center text-[10px] font-bold text-amber-700 flex-none">{user.avatar}</div>
+                            <div>
+                              <p className="text-xs font-semibold text-slate-800">{user.name.split(',')[0]}</p>
+                              <p className="text-[10px] text-slate-500">Aktif: {getLastActiveLabel(user.id)}</p>
+                            </div>
+                          </div>
+                          <span className="text-[9px] bg-amber-200 text-amber-800 font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
+                            Tidak Aktif {getLastActiveDays(user.id)}h
+                          </span>
                         </div>
-                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-primary-500 rounded-full transition-all" style={{ width: `${Math.min((progress.xp / 1200) * 100, 100)}%` }} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Upcoming schedule */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                  <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                    <span className="w-1.5 h-4 rounded-full bg-primary-400 inline-block" />
+                    Jadwal Mendatang
+                  </h3>
+                  <div className="space-y-2">
+                    {schedule.filter(s => !s.done).slice(0, 3).map(ev => (
+                      <div key={ev.id} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl">
+                        <div className="text-center flex-none bg-primary-100 rounded-lg px-2 py-1">
+                          <div className="text-sm font-black text-primary-700 leading-none">
+                            {new Date(ev.date).getDate()}
+                          </div>
+                          <div className="text-[9px] font-bold text-primary-500 uppercase">
+                            {new Date(ev.date).toLocaleDateString('id-ID', { month: 'short' })}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-slate-800">{ev.title}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">{ev.time} · {ev.peserta.length} peserta</p>
                         </div>
                       </div>
                     ))}
-                  </div>
-                </div>
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                  <h3 className="text-sm font-bold text-slate-800 mb-4">Status Validasi Konten</h3>
-                  <div className="space-y-2">
-                    {(['approved', 'review', 'draft'] as const).map(s => {
-                      const count = content.filter(c => c.status === s).length
-                      const pct = Math.round((count / content.length) * 100)
-                      const colors = { approved: '#0c8568', review: '#f59e0b', draft: '#94a3b8' }
-                      return (
-                        <div key={s}>
-                          <div className="flex justify-between text-xs text-slate-600 mb-1">
-                            <span className="font-medium capitalize">{statusLabels[s]}</span>
-                            <span className="font-bold">{count} ({pct}%)</span>
-                          </div>
-                          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: colors[s] }} />
-                          </div>
-                        </div>
-                      )
-                    })}
+                    {schedule.filter(s => !s.done).length === 0 && (
+                      <p className="text-xs text-slate-400 italic">Tidak ada jadwal mendatang.</p>
+                    )}
                   </div>
                 </div>
               </div>
 
+              {/* Recent notes */}
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                <h3 className="text-sm font-bold text-slate-800 mb-3">Rata-rata Skor Pre/Post Test per Modul</h3>
-                <div className="grid grid-cols-3 gap-4">
-                  {[
-                    { mod: 'Modul 1', pre: 2.7, post: 4.3 },
-                    { mod: 'Modul 2', pre: 2.4, post: 4.0 },
-                    { mod: 'Modul 3', pre: 2.1, post: 3.8 },
-                  ].map(m => (
-                    <div key={m.mod} className="text-center">
-                      <p className="text-xs font-bold text-slate-600 mb-2">{m.mod}</p>
-                      <div className="flex items-end justify-center gap-3 h-24">
-                        <div className="flex flex-col items-center gap-1">
-                          <span className="text-[10px] font-bold text-slate-500">{m.pre}</span>
-                          <div className="w-8 rounded-t-md bg-slate-300" style={{ height: `${(m.pre / 5) * 80}px` }} />
-                          <span className="text-[9px] text-slate-400">Pre</span>
-                        </div>
-                        <div className="flex flex-col items-center gap-1">
-                          <span className="text-[10px] font-bold text-primary-600">{m.post}</span>
-                          <div className="w-8 rounded-t-md bg-primary-500" style={{ height: `${(m.post / 5) * 80}px` }} />
-                          <span className="text-[9px] text-slate-400">Post</span>
-                        </div>
+                <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                  <span className="w-1.5 h-4 rounded-full bg-violet-400 inline-block" />
+                  Catatan Lapangan Terbaru
+                </h3>
+                <div className="space-y-2">
+                  {notes.slice(0, 3).map(n => (
+                    <div key={n.id} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl">
+                      <span className={`text-[9px] font-bold px-2 py-1 rounded-lg border flex-none mt-0.5 ${CAT_COLORS[n.category]}`}>
+                        {CAT_LABELS[n.category]}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-slate-700 leading-relaxed line-clamp-2">{n.body}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          {new Date(n.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -234,16 +314,36 @@ export default function AhliPage() {
             </div>
           )}
 
-          {/* DATA PESERTA */}
-          {section === 'peserta' && (
+          {/* ── KETERLIBATAN ───────────────────────── */}
+          {section === 'keterlibatan' && (
             <div>
-              <h1 className="text-2xl font-black text-slate-900 mb-1">Data Peserta</h1>
-              <p className="text-slate-500 text-sm mb-6">Progress dan performa seluruh peserta aktif</p>
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="mb-6">
+                <h1 className="text-2xl font-black text-slate-900">Keterlibatan Peserta</h1>
+                <p className="text-slate-500 text-sm mt-1">Monitor aktivitas dan keterlibatan seluruh peserta program</p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                {[
+                  { label: 'Rata-rata Modul Selesai', val: `${progresses.length ? (progresses.reduce((s, p) => s + p.progress.modules.length, 0) / progresses.length).toFixed(1) : '0.0'}/3`, emoji: '📚' },
+                  { label: 'Rata-rata Pelajaran',     val: progresses.length ? Math.round(progresses.reduce((s, p) => s + p.progress.done.length, 0) / progresses.length) : 0, emoji: '📖' },
+                  { label: 'Rata-rata XP',            val: `${avgXP} XP`, emoji: '⭐' },
+                ].map(s => (
+                  <div key={s.label} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                    <div className="text-xl mb-1">{s.emoji}</div>
+                    <div className="text-xl font-black text-slate-900">{s.val}</div>
+                    <div className="text-xs text-slate-500 mt-0.5">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mb-4">
+                <div className="px-5 py-4 border-b border-slate-50">
+                  <h3 className="text-sm font-bold text-slate-800">Detail Per Peserta</h3>
+                </div>
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 border-b border-slate-100">
                     <tr>
-                      {['Peserta', 'Sekolah', 'XP', 'Level', 'Pelajaran', 'Modul Selesai', 'Streak', 'Badge'].map(h => (
+                      {['Peserta', 'Sekolah', 'Terakhir Aktif', 'Modul', 'Pelajaran', 'XP', 'Streak', 'Status'].map(h => (
                         <th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wide px-4 py-3">{h}</th>
                       ))}
                     </tr>
@@ -260,173 +360,350 @@ export default function AhliPage() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-600">{user.school}</td>
+                        <td className="px-4 py-3 text-xs text-slate-600 max-w-[110px]">
+                          <p className="truncate">{user.school}</p>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">{getLastActiveLabel(user.id)}</td>
+                        <td className="px-4 py-3 text-xs font-semibold text-slate-700">{progress.modules.length}/3</td>
+                        <td className="px-4 py-3 text-xs text-slate-600">{progress.done.length}</td>
                         <td className="px-4 py-3">
                           <span className="text-xs font-bold text-primary-600">{progress.xp}</span>
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-600">L{progress.level}</td>
-                        <td className="px-4 py-3 text-xs text-slate-600">{progress.done.length}</td>
-                        <td className="px-4 py-3 text-xs text-slate-600">{progress.modules.length}/3</td>
                         <td className="px-4 py-3 text-xs text-slate-600">🔥 {progress.streak}</td>
-                        <td className="px-4 py-3 text-xs text-slate-600">{progress.badges.length}</td>
+                        <td className="px-4 py-3">
+                          {needsFollowUp(user.id)
+                            ? <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Follow-up</span>
+                            : <span className="text-[9px] font-bold bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">Aktif</span>
+                          }
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </div>
-          )}
 
-          {/* VALIDASI KONTEN */}
-          {section === 'konten' && (
-            <div>
-              <h1 className="text-2xl font-black text-slate-900 mb-1">Validasi Konten</h1>
-              <p className="text-slate-500 text-sm mb-6">Tinjau dan setujui konten modul pembelajaran</p>
-              <div className="space-y-3">
-                {content.map(c => (
-                  <div key={c.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{c.module}</span>
-                          <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{c.type}</span>
-                        </div>
-                        <h3 className="text-sm font-bold text-slate-900 mb-2">{c.title}</h3>
-                        <textarea
-                          value={c.notes}
-                          onChange={e => handleNoteChange(c.id, e.target.value)}
-                          className="w-full text-xs text-slate-600 border border-slate-200 rounded-xl px-3 py-2 resize-none outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-100"
-                          rows={2}
-                          placeholder="Catatan validasi…"
-                        />
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                <h3 className="text-sm font-bold text-slate-800 mb-4">Visualisasi Progress XP</h3>
+                <div className="space-y-4">
+                  {progresses.map(({ user, progress }) => (
+                    <div key={user.id}>
+                      <div className="flex justify-between text-xs mb-1.5">
+                        <span className="font-semibold text-slate-700">{user.name.split(',')[0]}</span>
+                        <span className="text-primary-600 font-bold">{progress.xp} XP · Level {progress.level}</span>
                       </div>
-                      <div className="flex flex-col items-end gap-2 flex-none">
-                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${statusColors[c.status]}`}>
-                          {statusLabels[c.status]}
-                        </span>
-                        <div className="flex gap-1.5">
-                          {(['draft', 'review', 'approved'] as const).map(s => (
-                            <button key={s} onClick={() => handleStatusChange(c.id, s)}
-                              className={`text-[10px] font-semibold px-2 py-1 rounded-lg transition border ${c.status === s ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-slate-500 border-slate-200 hover:border-primary-300'}`}>
-                              {statusLabels[s]}
-                            </button>
-                          ))}
-                        </div>
+                      <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-primary-400 to-primary-600 rounded-full transition-all"
+                          style={{ width: `${Math.min((progress.xp / 1200) * 100, 100)}%` }} />
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           )}
 
-          {/* MODERASI DISKUSI */}
-          {section === 'diskusi' && (
+          {/* ── JADWAL & REMINDER ──────────────────── */}
+          {section === 'jadwal' && (
             <div>
-              <h1 className="text-2xl font-black text-slate-900 mb-1">Moderasi Diskusi</h1>
-              <p className="text-slate-500 text-sm mb-6">Balas diskusi peserta sebagai ahli</p>
-              <div className="space-y-4">
-                {discussions.map(d => (
-                  <div key={d.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 flex-none">{d.avatar}</div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <h3 className="text-sm font-bold text-slate-900">{d.title}</h3>
-                          <span className="text-[9px] bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full">{d.moduleId.toUpperCase()}</span>
-                        </div>
-                        <p className="text-xs text-slate-500">{d.userName} · {d.time}</p>
-                      </div>
-                    </div>
-                    <p className="text-sm text-slate-700 leading-relaxed mb-4">{d.body}</p>
-                    {/* Existing replies */}
-                    {d.replies.length > 0 && (
-                      <div className="mb-4 space-y-2 border-l-2 border-primary-100 pl-4">
-                        {d.replies.map(r => (
-                          <div key={r.id} className="bg-slate-50 rounded-xl p-3">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-[10px] font-bold text-slate-700">{r.userName}</span>
-                              {r.expert && <span className="text-[8px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded-full">AHLI</span>}
-                              <span className="text-[10px] text-slate-400 ml-auto">{r.time}</span>
-                            </div>
-                            <p className="text-xs text-slate-600">{r.body}</p>
-                          </div>
+              <div className="mb-6">
+                <h1 className="text-2xl font-black text-slate-900">Jadwal & Reminder</h1>
+                <p className="text-slate-500 text-sm mt-1">Kirim pengingat kepada peserta dan kelola jadwal sesi lapangan</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                {/* Reminder form */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                  <h3 className="text-sm font-bold text-slate-800 mb-4">Kirim Pengingat</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Kepada</label>
+                      <select value={reminderTarget} onChange={e => setReminderTarget(e.target.value)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-100 bg-white">
+                        <option value="">-- Pilih Peserta --</option>
+                        {pesertaList.map(u => (
+                          <option key={u.id} value={u.name}>{u.name.split(',')[0]} — {u.school}</option>
                         ))}
-                      </div>
-                    )}
-                    {/* Reply form */}
-                    <div className="flex gap-2">
-                      <input
-                        value={replyInputs[d.id] || ''}
-                        onChange={e => setReplyInputs(prev => ({ ...prev, [d.id]: e.target.value }))}
-                        placeholder="Tulis balasan ahli…"
-                        className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-100"
-                      />
-                      <button onClick={() => handleReply(d.id)}
-                        className="bg-primary-600 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-primary-700 transition flex-none">
-                        Balas
-                      </button>
+                        <option value="Semua Peserta">📢 Semua Peserta</option>
+                      </select>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* UMPAN BALIK */}
-          {section === 'umpan-balik' && (
-            <div>
-              <h1 className="text-2xl font-black text-slate-900 mb-1">Umpan Balik Peserta</h1>
-              <p className="text-slate-500 text-sm mb-6">Evaluasi kualitatif dari peserta pelatihan</p>
-
-              {/* Summary stats */}
-              <div className="grid grid-cols-3 gap-4 mb-6">
-                {[
-                  { label: 'Rata-rata Relevansi', val: '4.3/5', emoji: '🎯', sub: 'Tinggi' },
-                  { label: 'Rata-rata Kejelasan', val: '4.3/5', emoji: '💡', sub: 'Tinggi' },
-                  { label: 'Rata-rata Penerapan', val: '4.0/5', emoji: '🛠️', sub: 'Baik' },
-                ].map(s => (
-                  <div key={s.label} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 text-center">
-                    <div className="text-2xl mb-2">{s.emoji}</div>
-                    <div className="text-xl font-black text-slate-900">{s.val}</div>
-                    <div className="text-[10px] text-slate-500 mt-0.5">{s.label}</div>
-                    <div className="text-[10px] font-bold text-primary-600 mt-1">{s.sub}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="space-y-4">
-                {FEEDBACK_DATA.map(f => (
-                  <div key={f.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <p className="text-sm font-bold text-slate-900">{f.peserta}</p>
-                        <p className="text-xs text-slate-500">{f.sekolah} · {f.modul}</p>
-                      </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Pesan</label>
+                      <textarea value={reminderMsg} onChange={e => setReminderMsg(e.target.value)}
+                        rows={3} placeholder="Tulis pesan pengingat untuk peserta..."
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-100 resize-none" />
                     </div>
-                    <div className="grid grid-cols-3 gap-3 mb-3">
-                      {[
-                        { label: 'Relevansi', val: f.relevance },
-                        { label: 'Kejelasan', val: f.clarity },
-                        { label: 'Penerapan', val: f.applicability },
-                      ].map(s => (
-                        <div key={s.label} className="text-center">
-                          <p className="text-[10px] text-slate-400 mb-1">{s.label}</p>
-                          <div className="flex justify-center gap-0.5">
-                            {[1, 2, 3, 4, 5].map(i => (
-                              <span key={i} className={`text-sm ${i <= s.val ? 'text-amber-400' : 'text-slate-200'}`}>★</span>
-                            ))}
+                    <button onClick={handleSendReminder} disabled={!reminderTarget || !reminderMsg.trim()}
+                      className="w-full bg-primary-600 text-white font-bold py-2.5 rounded-xl hover:bg-primary-700 transition disabled:opacity-40 disabled:cursor-not-allowed text-sm">
+                      Kirim Pengingat
+                    </button>
+                  </div>
+                </div>
+
+                {/* Reminder history */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                  <h3 className="text-sm font-bold text-slate-800 mb-3">Riwayat Pengingat</h3>
+                  {remindersSent.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic">Belum ada pengingat yang dikirim.</p>
+                  ) : (
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {remindersSent.map(r => (
+                        <div key={r.id} className="bg-slate-50 rounded-xl p-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] font-bold text-primary-600">→ {r.to}</span>
+                            <span className="text-[10px] text-slate-400">{r.time}</span>
                           </div>
-                          <p className="text-xs font-bold text-slate-700 mt-0.5">{s.val}/5</p>
+                          <p className="text-xs text-slate-600">{r.msg}</p>
                         </div>
                       ))}
                     </div>
-                    <div className="bg-slate-50 rounded-xl px-4 py-3">
-                      <p className="text-xs text-slate-600 italic leading-relaxed">"{f.comment}"</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Schedule */}
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                <h3 className="text-sm font-bold text-slate-800 mb-4">Jadwal Sesi</h3>
+                <div className="space-y-3">
+                  {schedule.map(ev => (
+                    <div key={ev.id} className={`flex items-start gap-4 p-4 rounded-xl border transition ${ev.done ? 'bg-slate-50 border-slate-100 opacity-60' : 'bg-white border-slate-200 hover:border-primary-200'}`}>
+                      <div className={`flex-none text-center rounded-xl p-2.5 ${ev.done ? 'bg-slate-100' : 'bg-primary-50'}`}>
+                        <div className={`text-base font-black leading-none ${ev.done ? 'text-slate-400' : 'text-primary-700'}`}>
+                          {new Date(ev.date).getDate()}
+                        </div>
+                        <div className={`text-[9px] font-bold uppercase mt-0.5 ${ev.done ? 'text-slate-400' : 'text-primary-500'}`}>
+                          {new Date(ev.date).toLocaleDateString('id-ID', { month: 'short' })}
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold text-slate-800">{ev.title}</p>
+                          {ev.done && <span className="text-[9px] bg-slate-200 text-slate-500 font-bold px-2 py-0.5 rounded-full">Selesai</span>}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">{ev.time} · {ev.peserta.join(', ')}</p>
+                        {ev.note && <p className="text-[10px] text-slate-400 mt-1 italic">📌 {ev.note}</p>}
+                      </div>
+                      {!ev.done && (
+                        <button onClick={() => setSchedule(prev => prev.map(s => s.id === ev.id ? { ...s, done: true } : s))}
+                          className="flex-none text-xs font-semibold border border-slate-200 text-slate-500 hover:bg-primary-50 hover:border-primary-300 hover:text-primary-700 px-3 py-1.5 rounded-lg transition">
+                          Tandai Selesai
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── CATATAN LAPANGAN ───────────────────── */}
+          {section === 'catatan' && (
+            <div>
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h1 className="text-2xl font-black text-slate-900">Catatan Lapangan</h1>
+                  <p className="text-slate-500 text-sm mt-1">Dokumentasikan observasi dan temuan selama pendampingan di lapangan</p>
+                </div>
+                <button onClick={() => setShowNoteForm(v => !v)}
+                  className="bg-primary-600 text-white text-sm font-bold px-4 py-2 rounded-xl hover:bg-primary-700 transition">
+                  + Catatan Baru
+                </button>
+              </div>
+
+              {showNoteForm && (
+                <div className="bg-white rounded-2xl border border-primary-200 shadow-sm p-5 mb-4">
+                  <h3 className="text-sm font-bold text-slate-800 mb-4">Tambah Catatan Baru</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">Kategori</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {(Object.entries(CAT_LABELS) as [NoteCategory, string][]).map(([k, v]) => (
+                          <button key={k} onClick={() => setNoteForm(f => ({ ...f, category: k }))}
+                            className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition ${noteForm.category === k ? CAT_COLORS[k] : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                            {v}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Lokasi (opsional)</label>
+                      <input value={noteForm.location} onChange={e => setNoteForm(f => ({ ...f, location: e.target.value }))}
+                        placeholder="Nama sekolah atau lokasi sesi"
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-100" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Catatan *</label>
+                      <textarea value={noteForm.body} onChange={e => setNoteForm(f => ({ ...f, body: e.target.value }))}
+                        rows={4} placeholder="Tuliskan observasi, temuan, kendala, atau rekomendasi..."
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-100 resize-none" />
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => setShowNoteForm(false)}
+                        className="flex-1 border border-slate-200 text-slate-600 font-semibold py-2 rounded-xl hover:bg-slate-50 transition text-sm">
+                        Batal
+                      </button>
+                      <button onClick={handleAddNote} disabled={!noteForm.body.trim()}
+                        className="flex-1 bg-primary-600 text-white font-bold py-2 rounded-xl hover:bg-primary-700 transition text-sm disabled:opacity-40">
+                        Simpan Catatan
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {notes.map(n => (
+                  <div key={n.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                    <div className="flex items-start gap-3">
+                      <span className={`flex-none mt-0.5 px-2.5 py-1 rounded-lg text-[10px] font-bold border ${CAT_COLORS[n.category]}`}>
+                        {CAT_LABELS[n.category]}
+                      </span>
+                      <div className="flex-1">
+                        <p className="text-sm text-slate-800 leading-relaxed">{n.body}</p>
+                        <div className="flex items-center gap-3 mt-2 text-[10px] text-slate-400">
+                          <span>📍 {n.location}</span>
+                          <span>·</span>
+                          <span>🗓 {new Date(n.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* ── FORUM DISKUSI ──────────────────────── */}
+          {section === 'diskusi' && (
+            <div>
+              <div className="mb-6">
+                <h1 className="text-2xl font-black text-slate-900">Forum Diskusi</h1>
+                <p className="text-slate-500 text-sm mt-1">Pantau diskusi peserta dan teruskan pertanyaan teknis ke Peneliti</p>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-5 flex items-start gap-3">
+                <span className="text-amber-500 text-lg flex-none mt-0.5">ℹ️</span>
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">Peran Fasilitator dalam Diskusi</p>
+                  <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">
+                    Anda memfasilitasi diskusi antar peserta, bukan menjawab pertanyaan teknis secara langsung.
+                    Untuk pertanyaan yang membutuhkan keahlian konten, gunakan tombol <strong>"Teruskan ke Peneliti"</strong>.
+                  </p>
+                </div>
+              </div>
+
+              {discussions.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-10 text-center">
+                  <p className="text-slate-300 text-4xl mb-3">💬</p>
+                  <p className="text-sm text-slate-500">Belum ada diskusi dari peserta.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {discussions.map(d => (
+                    <div key={d.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 flex-none">{d.avatar}</div>
+                        <div className="flex-1">
+                          <h3 className="text-sm font-bold text-slate-900">{d.title}</h3>
+                          <p className="text-xs text-slate-500">{d.userName} · {d.time}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-none">
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${d.replies.length > 0 ? 'bg-primary-100 text-primary-700' : 'bg-slate-100 text-slate-500'}`}>
+                            {d.replies.length > 0 ? `${d.replies.length} Balasan` : 'Belum ada balasan'}
+                          </span>
+                          <button className="text-[10px] font-bold border border-slate-200 text-slate-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 px-3 py-1 rounded-lg transition">
+                            Teruskan ke Peneliti
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 rounded-xl px-4 py-3">{d.body}</p>
+                      {d.replies.length > 0 && (
+                        <div className="mt-3 space-y-2 border-l-2 border-primary-100 pl-4">
+                          {d.replies.map(r => (
+                            <div key={r.id} className="bg-slate-50 rounded-xl p-3">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-[10px] font-bold text-slate-700">{r.userName}</span>
+                                {r.expert && <span className="text-[8px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded-full">AHLI</span>}
+                                <span className="text-[10px] text-slate-400 ml-auto">{r.time}</span>
+                              </div>
+                              <p className="text-xs text-slate-600">{r.body}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── LAPORAN KE PENELITI ────────────────── */}
+          {section === 'laporan' && (
+            <div>
+              <div className="mb-6">
+                <h1 className="text-2xl font-black text-slate-900">Laporan ke Peneliti</h1>
+                <p className="text-slate-500 text-sm mt-1">Kirim laporan perkembangan lapangan secara berkala kepada tim peneliti</p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                {[
+                  { label: 'Laporan Terkirim', val: sentReports.length, emoji: '📤' },
+                  { label: 'Catatan Lapangan', val: notes.length,       emoji: '📝' },
+                  { label: 'Reminder Terkirim', val: remindersSent.length, emoji: '🔔' },
+                ].map(s => (
+                  <div key={s.label} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 text-center">
+                    <div className="text-2xl mb-2">{s.emoji}</div>
+                    <div className="text-2xl font-black text-slate-900">{s.val}</div>
+                    <div className="text-xs text-slate-500 mt-0.5">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 mb-4">
+                <h3 className="text-sm font-bold text-slate-800 mb-4">Buat Laporan Baru</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Periode Laporan</label>
+                    <input value={reportForm.period} onChange={e => setReportForm(f => ({ ...f, period: e.target.value }))}
+                      placeholder="Contoh: Minggu ke-3, Juni 2026"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-100" />
+                  </div>
+                  {[
+                    { key: 'highlights' as const,    label: 'Poin Penting *', placeholder: 'Apa yang terjadi selama periode ini? Pencapaian apa yang diraih peserta?', rows: 3 },
+                    { key: 'obstacles' as const,     label: 'Kendala & Hambatan', placeholder: 'Apakah ada kendala teknis, kehadiran, atau hambatan lainnya?', rows: 2 },
+                    { key: 'recommendation' as const,label: 'Rekomendasi', placeholder: 'Rekomendasi untuk perbaikan atau perubahan pada program', rows: 2 },
+                    { key: 'nextPlan' as const,      label: 'Rencana Selanjutnya', placeholder: 'Apa yang akan dilakukan pada periode berikutnya?', rows: 2 },
+                  ].map(f => (
+                    <div key={f.key}>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">{f.label}</label>
+                      <textarea value={reportForm[f.key]} onChange={e => setReportForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                        rows={f.rows} placeholder={f.placeholder}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-100 resize-none" />
+                    </div>
+                  ))}
+                  <button onClick={handleSendReport} disabled={!reportForm.highlights.trim()}
+                    className="w-full bg-primary-600 text-white font-bold py-3 rounded-xl hover:bg-primary-700 transition disabled:opacity-40 disabled:cursor-not-allowed">
+                    Kirim Laporan ke Peneliti
+                  </button>
+                </div>
+              </div>
+
+              {sentReports.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                  <h3 className="text-sm font-bold text-slate-800 mb-3">Laporan Terkirim</h3>
+                  <div className="space-y-2">
+                    {sentReports.map(r => (
+                      <div key={r.id} className="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800">{r.period}</p>
+                          <p className="text-xs text-slate-400">Dikirim: {r.sentAt}</p>
+                        </div>
+                        <span className="text-[9px] font-bold bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">Terkirim ✓</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
