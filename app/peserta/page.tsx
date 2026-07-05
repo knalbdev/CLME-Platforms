@@ -2,7 +2,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSession, logout } from '@/lib/auth'
-import { getModules, getDiscussions, addDiscussion } from '@/lib/data'
+import { getModules } from '@/lib/data'
+import { getFirestoreModuleMetas, getFirestoreProgress, getFirestoreDiscussions, addFirestoreDiscussion, getFirestoreModuleLessons } from '@/lib/db'
 import {
   getProgress, updateStreak, addXP, markLesson, markModule,
   saveScore, getLevelProgress, getLevel, LEVELS, BADGES,
@@ -15,16 +16,6 @@ type Screen =
 
 type NavTab = 'dashboard' | 'modules' | 'chat' | 'discussion' | 'achievements'
 
-const CHAT_RESPONSES = [
-  'Pertanyaan yang bagus! Kata sandi yang kuat sebaiknya menggunakan passphrase — gabungan 4-5 kata yang mudah diingat tapi sulit ditebak. Contoh: "kucing-tidur-di-atap-biru". Lebih kuat dari "P@ssw0rd123" sekalipun!',
-  'Phishing adalah upaya penipuan yang mencuri informasi sensitif dengan berpura-pura sebagai entitas terpercaya. Tanda utama: tekanan waktu, URL tidak wajar, dan permintaan password. Selalu periksa domain email pengirim.',
-  'MFA sangat penting! Ini menambahkan lapisan keamanan — meski password bocor, peretas tetap butuh kode OTP dari HP Anda. Aktifkan di semua akun penting: email, Dapodik, SiPeg.',
-  'Jika HP sekolah hilang berisi data siswa: (1) Remote wipe segera via Google/Apple, (2) Laporkan ke IT sekolah, (3) Dokumentasi insiden, (4) Notifikasi ke BSSN jika data pribadi siswa terekspos. Ini kewajiban UU PDP.',
-  'Bitwarden adalah password manager gratis dan open source yang direkomendasikan untuk guru. Tersedia di Windows, Mac, Android, iOS, dan ekstensi browser. Data tersimpan terenkripsi dengan AES-256.',
-  'UU PDP No. 27/2022 mewajibkan pelaporan pelanggaran data dalam 14 hari kerja. Data siswa (nama, nilai, kondisi keluarga) termasuk data pribadi yang dilindungi. Sekolah bisa dikenai sanksi jika tidak melapor.',
-  'Untuk mengamankan email sekolah: (1) Aktifkan 2FA, (2) Gunakan password manager, (3) Periksa pengaturan forwarding email, (4) Jangan klik link dari email tidak dikenal, (5) Verifikasi domain pengirim sebelum membuka lampiran.',
-  'Backup data menggunakan aturan 3-2-1 dari NIST/CISA: 3 salinan data, 2 media berbeda, 1 di lokasi berbeda (cloud atau offline). Untuk data siswa sekolah, backup rutin ke Google Drive terenkripsi sangat disarankan.',
-]
 
 interface AchievementData { title: string; sub: string; emoji: string; xp: number }
 
@@ -63,8 +54,8 @@ export default function PesertaPage() {
     { role: 'ai', text: 'Halo! Saya AI Tutor CLME 👋\n\nSaya siap membantu Anda memahami konsep keamanan siber. Apa yang ingin Anda tanyakan?' },
   ])
   const [chatInput, setChatInput] = useState('')
-  const [chatIdx, setChatIdx] = useState(0)
   const [chatLoading, setChatLoading] = useState(false)
+  const [logoutConfirm, setLogoutConfirm] = useState(false)
 
   // achievement popup
   const [showAchievement, setShowAchievement] = useState(false)
@@ -80,13 +71,47 @@ export default function PesertaPage() {
   const [pwInput, setPwInput] = useState('')
 
   useEffect(() => {
-    const s = getSession()
-    if (!s || s.role !== 'peserta') { router.push('/'); return }
-    setSession(s)
-    updateStreak(s.id)
-    setProgress(getProgress(s.id))
-    setModules(getModules())
-    setDiscussions(getDiscussions())
+    const load = async () => {
+      const s = getSession()
+      if (!s || s.role !== 'peserta') { router.push('/login'); return }
+      setSession(s)
+      updateStreak(s.id)
+
+      // Restore progress from Firestore if localStorage is empty
+      const localProg = getProgress(s.id)
+      if (localProg.xp === 0 && localProg.done.length === 0) {
+        const remoteProg = await getFirestoreProgress(s.id)
+        if (remoteProg && (remoteProg.xp > 0 || remoteProg.done.length > 0)) {
+          localStorage.setItem(`clme_prog_${s.id}`, JSON.stringify(remoteProg))
+          setProgress(remoteProg)
+        } else {
+          setProgress(localProg)
+        }
+      } else {
+        setProgress(localProg)
+      }
+
+      // Load discussions from Firestore (newest first via orderBy desc)
+      const firestoreDisc = await getFirestoreDiscussions()
+      setDiscussions(firestoreDisc)
+
+      // Load modules: local defaults → apply Firestore lesson content overrides → apply status overrides
+      const local = getModules()
+      const [metas, lessonOverrides] = await Promise.all([
+        getFirestoreModuleMetas(),
+        Promise.all(local.map(m => getFirestoreModuleLessons(m.id))),
+      ])
+      let merged = local.map((m, i) =>
+        lessonOverrides[i] ? { ...m, lessons: lessonOverrides[i]! } : m
+      )
+      if (metas.length > 0) {
+        const statusMap: Record<string, 'active' | 'coming' | 'draft'> = {}
+        metas.forEach(m => { statusMap[m.id] = m.status })
+        merged = merged.map(m => statusMap[m.id] ? { ...m, status: statusMap[m.id] } : m)
+      }
+      setModules(merged)
+    }
+    load()
   }, [router])
 
   useEffect(() => {
@@ -105,6 +130,7 @@ export default function PesertaPage() {
 
   const handleCompleteLesson = (lessonId: string, xp: number, badgeId?: string, moduleId?: string) => {
     if (!session) return
+    if (progress?.done.includes(lessonId)) { setScreen('module-detail'); return }
     const res = markLesson(session.id, lessonId, xp, badgeId)
     if (moduleId && activeModule) {
       const allDone = activeModule.lessons.every(l =>
@@ -195,32 +221,38 @@ export default function PesertaPage() {
     if (!chatInput.trim() || chatLoading || !session) return
     const msg = chatInput.trim()
     setChatInput('')
-    setChatMsgs(m => [...m, { role: 'user', text: msg }])
+    const updatedMsgs = [...chatMsgs, { role: 'user' as const, text: msg }]
+    setChatMsgs(updatedMsgs)
     setChatLoading(true)
-    await new Promise(r => setTimeout(r, 900))
-    setChatMsgs(m => [...m, { role: 'ai', text: CHAT_RESPONSES[chatIdx % CHAT_RESPONSES.length] }])
-    setChatIdx(i => i + 1)
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg, history: chatMsgs }),
+      })
+      const data = await res.json()
+      setChatMsgs(m => [...m, { role: 'ai', text: data.error ? `⚠️ ${data.error}` : data.text }])
+    } catch {
+      setChatMsgs(m => [...m, { role: 'ai', text: '⚠️ Tidak dapat terhubung ke AI. Periksa koneksi internet.' }])
+    }
     setChatLoading(false)
     addXP(session.id, 5)
   }
 
-  const handleSubmitPost = () => {
+  const handleSubmitPost = async () => {
     if (!session || !postTitle.trim() || !postBody.trim()) return
-    addDiscussion({
-      id: `d_${Date.now()}`,
+    await addFirestoreDiscussion({
       moduleId: postModId,
       userId: session.id,
       userName: session.name,
       avatar: session.avatar,
       title: postTitle.trim(),
       body: postBody.trim(),
-      time: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
-      likes: 0,
-      replies: [],
     })
     const { p } = addXP(session.id, 25, 'diskusi')
     setProgress(p)
-    setDiscussions(getDiscussions())
+    const updated = await getFirestoreDiscussions()
+    setDiscussions(updated)
     setPostTitle(''); setPostBody('')
     showAch({ emoji: '💬', title: 'Diskusi Dibuat!', sub: '+25 XP · Badge "Diskusi Aktif" diperoleh!', xp: 25 })
     setScreen('discussion')
@@ -236,7 +268,8 @@ export default function PesertaPage() {
     setScreen('lesson')
   }
 
-  const handleLogout = () => { logout(); router.push('/') }
+  const handleLogout = () => setLogoutConfirm(true)
+  const doLogout = () => { logout(); router.push('/login') }
 
   const mainScreens: Screen[] = ['dashboard', 'modules', 'chat', 'discussion', 'achievements']
   const showNav = mainScreens.includes(screen)
@@ -515,8 +548,7 @@ export default function PesertaPage() {
             <div className="space-y-2">
               {m.lessons.map((l, i) => {
                 const done = progress.done.includes(l.id)
-                const prevDone = i === 0 || progress.done.includes(m.lessons[i - 1].id)
-                const locked = !preDone && i > 0
+                const locked = i === 0 ? false : !progress.done.includes(m.lessons[i - 1].id)
                 return (
                   <button key={l.id} disabled={locked}
                     onClick={() => !locked && goToLesson(l)}
@@ -597,10 +629,16 @@ export default function PesertaPage() {
               </div>
             ))}
           </div>
-          <button onClick={() => handleCompleteLesson(l.id, l.xp, undefined, activeModule?.id)}
-            className="mt-6 w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-3.5 rounded-xl transition shadow-sm">
-            Selesai & Klaim +{l.xp} XP →
-          </button>
+          {progress.done.includes(l.id) ? (
+            <div className="mt-6 w-full bg-primary-50 border border-primary-200 text-primary-700 font-bold py-3.5 rounded-xl text-center">
+              ✓ Pelajaran Sudah Selesai
+            </div>
+          ) : (
+            <button onClick={() => handleCompleteLesson(l.id, l.xp, undefined, activeModule?.id)}
+              className="mt-6 w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-3.5 rounded-xl transition shadow-sm">
+              Selesai & Klaim +{l.xp} XP →
+            </button>
+          )}
         </div>
       )
     }
@@ -664,10 +702,16 @@ export default function PesertaPage() {
             </ul>
           </div>
 
-          <button onClick={() => handleCompleteLesson(l.id, l.xp, undefined, activeModule?.id)}
-            className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-3.5 rounded-xl transition shadow-sm">
-            Selesai & Klaim +{l.xp} XP →
-          </button>
+          {progress.done.includes(l.id) ? (
+            <div className="w-full bg-primary-50 border border-primary-200 text-primary-700 font-bold py-3.5 rounded-xl text-center">
+              ✓ Pelajaran Sudah Selesai
+            </div>
+          ) : (
+            <button onClick={() => handleCompleteLesson(l.id, l.xp, undefined, activeModule?.id)}
+              className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-3.5 rounded-xl transition shadow-sm">
+              Selesai & Klaim +{l.xp} XP →
+            </button>
+          )}
         </div>
       )
     }
@@ -715,10 +759,16 @@ export default function PesertaPage() {
             </div>
           )}
           {scenarioAnswered && (
-            <button onClick={() => handleCompleteLesson(l.id, l.xp, undefined, activeModule?.id)}
-              className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-3.5 rounded-xl transition">
-              Selesai & Klaim +{l.xp} XP →
-            </button>
+            progress.done.includes(l.id) ? (
+              <div className="w-full bg-primary-50 border border-primary-200 text-primary-700 font-bold py-3.5 rounded-xl text-center">
+                ✓ Pelajaran Sudah Selesai
+              </div>
+            ) : (
+              <button onClick={() => handleCompleteLesson(l.id, l.xp, undefined, activeModule?.id)}
+                className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-3.5 rounded-xl transition">
+                Selesai & Klaim +{l.xp} XP →
+              </button>
+            )
           )}
         </div>
       )
@@ -741,10 +791,16 @@ export default function PesertaPage() {
               <p className="text-sm text-slate-600 mb-6">
                 {pct === 100 ? 'Sempurna! Anda sangat jago mendeteksi phishing.' : pct >= 70 ? 'Bagus! Tetap waspada terhadap email mencurigakan.' : 'Perlu latihan lagi. Selalu periksa domain dan jangan terburu-buru.'}
               </p>
-              <button onClick={() => handleCompleteLesson(l.id, l.xp, undefined, activeModule?.id)}
-                className="w-full bg-primary-600 text-white font-bold py-3.5 rounded-xl hover:bg-primary-700 transition">
-                Klaim +{l.xp} XP →
-              </button>
+              {progress.done.includes(l.id) ? (
+                <div className="w-full bg-primary-50 border border-primary-200 text-primary-700 font-bold py-3.5 rounded-xl text-center">
+                  ✓ Pelajaran Sudah Selesai
+                </div>
+              ) : (
+                <button onClick={() => handleCompleteLesson(l.id, l.xp, undefined, activeModule?.id)}
+                  className="w-full bg-primary-600 text-white font-bold py-3.5 rounded-xl hover:bg-primary-700 transition">
+                  Klaim +{l.xp} XP →
+                </button>
+              )}
             </div>
           </div>
         )
@@ -1230,9 +1286,54 @@ export default function PesertaPage() {
   const navTitle = navTitles[screen]
 
   return (
-    <div className="min-h-screen bg-slate-200 flex items-center justify-center">
-      {/* Phone wrapper */}
-      <div className="w-full max-w-[390px] h-screen max-h-[844px] bg-white shadow-2xl flex flex-col overflow-hidden relative">
+    <div className="h-screen bg-white flex overflow-hidden">
+
+      {/* ── Desktop Sidebar ─────────────────────────────── */}
+      <aside className="hidden md:flex w-60 bg-white border-r border-slate-100 flex-col flex-none shadow-sm">
+        <div className="px-5 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <img src="/logo.png" alt="CLME" className="w-8 h-8 object-contain flex-none" />
+            <div>
+              <p className="text-sm font-black text-slate-900 leading-none">CLME</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Platform</p>
+            </div>
+          </div>
+        </div>
+
+        <nav className="flex-1 p-3 space-y-0.5">
+          {navItems.map(n => {
+            const active = screen === n.screen
+            return (
+              <button key={n.tab} onClick={() => setScreen(n.screen)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left ${
+                  active ? 'bg-primary-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}>
+                <span className="text-base leading-none">{n.emoji}</span>
+                <span>{n.label}</span>
+              </button>
+            )
+          })}
+        </nav>
+
+        {session && (
+          <div className="p-4 border-t border-slate-100">
+            <div className="flex items-center gap-2.5 mb-3">
+              <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-xs font-black text-primary-700 flex-none">{session.avatar}</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-slate-800 truncate">{session.name.split(',')[0]}</p>
+                <p className="text-[10px] text-slate-400 truncate">{session.school}</p>
+              </div>
+            </div>
+            <button onClick={handleLogout} className="w-full text-xs text-slate-500 hover:text-red-600 py-1.5 rounded-lg border border-slate-200 hover:border-red-200 transition">
+              Keluar
+            </button>
+          </div>
+        )}
+      </aside>
+
+      {/* ── Main Area ───────────────────────────────────── */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+
         {/* Top bar */}
         <div className="flex-none bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3 z-10">
           {header ? (
@@ -1244,37 +1345,41 @@ export default function PesertaPage() {
             </>
           ) : (
             <>
-              <div className="w-7 h-7 rounded-lg bg-primary-600 flex items-center justify-center flex-none">
-                <span className="text-white text-xs">🛡️</span>
-              </div>
+              {/* Mobile-only logo */}
+              <img src="/logo.png" alt="CLME" className="md:hidden w-7 h-7 object-contain flex-none" />
               <h1 className="text-sm font-bold text-slate-800 flex-1">{navTitle || 'CLME'}</h1>
+              {progress && (
+                <span className="text-xs bg-primary-100 text-primary-700 font-bold px-2.5 py-0.5 rounded-full flex-none">
+                  {progress.xp} XP
+                </span>
+              )}
             </>
           )}
         </div>
 
-        {/* Main content */}
+        {/* Screen content */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {screen === 'dashboard' && renderDashboard()}
-          {screen === 'modules' && renderModules()}
+          {screen === 'dashboard'     && renderDashboard()}
+          {screen === 'modules'       && renderModules()}
           {screen === 'module-detail' && renderModuleDetail()}
-          {screen === 'lesson' && renderLesson()}
-          {screen === 'test' && renderTest()}
-          {screen === 'chat' && renderChat()}
-          {screen === 'discussion' && renderDiscussion()}
-          {screen === 'new-post' && renderNewPost()}
-          {screen === 'achievements' && renderAchievements()}
-          {screen === 'certificate' && renderCertificate()}
+          {screen === 'lesson'        && renderLesson()}
+          {screen === 'test'          && renderTest()}
+          {screen === 'chat'          && renderChat()}
+          {screen === 'discussion'    && renderDiscussion()}
+          {screen === 'new-post'      && renderNewPost()}
+          {screen === 'achievements'  && renderAchievements()}
+          {screen === 'certificate'   && renderCertificate()}
         </div>
 
-        {/* Bottom nav */}
+        {/* Bottom nav — mobile only */}
         {showNav && (
-          <div className="flex-none border-t border-slate-100 bg-white px-2 py-2 grid grid-cols-5 gap-1">
+          <div className="md:hidden flex-none border-t border-slate-100 bg-white px-2 py-2 grid grid-cols-5 gap-1">
             {navItems.map(n => {
               const active = screen === n.screen
               return (
                 <button key={n.tab} onClick={() => setScreen(n.screen)}
                   className={`flex flex-col items-center gap-0.5 py-1.5 px-1 rounded-xl transition ${active ? 'bg-primary-50' : 'hover:bg-slate-50'}`}>
-                  <span className="text-lg">{n.emoji}</span>
+                  <span className="text-xl">{n.emoji}</span>
                   <span className={`text-[9px] font-semibold ${active ? 'text-primary-600' : 'text-slate-400'}`}>{n.label}</span>
                 </button>
               )
@@ -1282,6 +1387,27 @@ export default function PesertaPage() {
           </div>
         )}
       </div>
+
+      {/* Logout confirm */}
+      {logoutConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-xs w-full text-center animate-fade-in">
+            <div className="text-3xl mb-3">👋</div>
+            <h3 className="text-base font-bold text-slate-900 mb-1">Keluar dari CLME?</h3>
+            <p className="text-sm text-slate-500 mb-5">Sesi kamu akan diakhiri.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setLogoutConfirm(false)}
+                className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition">
+                Batal
+              </button>
+              <button onClick={doLogout}
+                className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 rounded-xl text-sm font-bold text-white transition">
+                Ya, Keluar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Achievement popup overlay */}
       {showAchievement && achievementData && (

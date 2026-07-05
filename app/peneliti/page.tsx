@@ -1,33 +1,49 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { getSession, logout, getAllUsers } from '@/lib/auth'
-
-import { getProgress } from '@/lib/gamification'
+import { getSession, logout } from '@/lib/auth'
+import { getFirestoreUsers, getFirestoreProgress, getFasilitatorReports, type FasilitatorReport } from '@/lib/db'
 import type { User } from '@/types'
 
-type Section = 'dashboard' | 'data-log' | 'analisis' | 'efektivitas' | 'ekspor'
+type Section = 'dashboard' | 'data-log' | 'analisis' | 'efektivitas' | 'laporan' | 'ekspor'
 
 export default function PenelitiPage() {
   const router = useRouter()
   const [section, setSection] = useState<Section>('dashboard')
   const [session, setSession] = useState<User | null>(null)
   const [pesertaData, setPesertaData] = useState<{ user: User; xp: number; done: number; modules: number; scores: Record<string, number>; streak: number; badges: number }[]>([])
+  const [reports, setReports] = useState<FasilitatorReport[]>([])
   const [exportMsg, setExportMsg] = useState('')
+  const [logoutConfirm, setLogoutConfirm] = useState(false)
 
   useEffect(() => {
-    const s = getSession()
-    if (!s || s.role !== 'peneliti') { router.push('/'); return }
-    setSession(s)
-    const all = getAllUsers().filter(u => u.role === 'peserta')
-    const data = all.map(u => {
-      const p = getProgress(u.id)
-      return { user: u, xp: p.xp, done: p.done.length, modules: p.modules.length, scores: p.scores, streak: p.streak, badges: p.badges.length }
-    })
-    setPesertaData(data)
+    const load = async () => {
+      const s = getSession()
+      if (!s || s.role !== 'peneliti') { router.push('/login'); return }
+      setSession(s)
+      const users = await getFirestoreUsers()
+      const peserta = users.filter(u => u.role === 'peserta')
+      const data = await Promise.all(peserta.map(async u => {
+        const p = await getFirestoreProgress(u.id)
+        return {
+          user: u,
+          xp: p?.xp ?? 0,
+          done: p?.done?.length ?? 0,
+          modules: p?.modules?.length ?? 0,
+          scores: p?.scores ?? {},
+          streak: p?.streak ?? 0,
+          badges: p?.badges?.length ?? 0,
+        }
+      }))
+      setPesertaData(data)
+      const reps = await getFasilitatorReports()
+      setReports(reps)
+    }
+    load()
   }, [router])
 
-  const handleLogout = () => { logout(); router.push('/') }
+  const handleLogout = () => setLogoutConfirm(true)
+  const doLogout = () => { logout(); router.push('/login') }
 
   const getModuleScores = () => {
     const mods = ['m1', 'm2', 'm3']
@@ -53,6 +69,7 @@ export default function PenelitiPage() {
     { id: 'data-log', label: 'Log Data Mentah', emoji: '🗄️' },
     { id: 'analisis', label: 'Analisis N-Gain', emoji: '📈' },
     { id: 'efektivitas', label: 'Efektivitas', emoji: '🎯' },
+    { id: 'laporan', label: 'Laporan Fasilitator', emoji: '📋' },
     { id: 'ekspor', label: 'Ekspor Data', emoji: '📥' },
   ]
 
@@ -99,10 +116,10 @@ export default function PenelitiPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {/* Sidebar */}
-      <aside className="w-60 bg-white border-r border-slate-100 flex flex-col shadow-sm flex-none">
+      <aside className="hidden md:flex w-60 bg-white border-r border-slate-100 flex-col shadow-sm flex-none">
         <div className="p-5 border-b border-slate-100">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white text-xs">🛡️</div>
+            <img src="/logo.png" alt="CLME" className="w-8 h-8 object-contain flex-none" />
             <div>
               <p className="text-sm font-black text-slate-900">CLME</p>
               <p className="text-[10px] text-slate-400 font-medium">Peneliti</p>
@@ -130,8 +147,14 @@ export default function PenelitiPage() {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="p-6 max-w-5xl mx-auto">
+      <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+        {/* Mobile section header */}
+        <div className="md:hidden sticky top-0 z-10 bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3">
+          <img src="/logo.png" alt="CLME" className="w-7 h-7 object-contain flex-none" />
+          <p className="text-sm font-bold text-slate-800">CLME · Peneliti</p>
+          <span className="ml-auto text-base">{navItems.find(n => n.id === section)?.emoji}</span>
+        </div>
+        <div className="p-4 md:p-6 max-w-5xl mx-auto">
 
           {/* DASHBOARD */}
           {section === 'dashboard' && (
@@ -387,6 +410,47 @@ export default function PenelitiPage() {
             </div>
           )}
 
+          {/* LAPORAN FASILITATOR */}
+          {section === 'laporan' && (
+            <div>
+              <h1 className="text-2xl font-black text-slate-900 mb-1">Laporan Fasilitator</h1>
+              <p className="text-slate-500 text-sm mb-6">Laporan periodik yang dikirim oleh fasilitator program</p>
+              {reports.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-10 text-center">
+                  <p className="text-4xl mb-3">📭</p>
+                  <p className="text-slate-500 text-sm">Belum ada laporan dari fasilitator.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {reports.map((r, i) => (
+                    <div key={r.id ?? i} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <p className="text-sm font-black text-slate-900">{r.facilitatorName}</p>
+                          <p className="text-xs text-slate-400">Periode: {r.period} · Dikirim: {r.sentAt}</p>
+                        </div>
+                        <span className="bg-primary-50 text-primary-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-primary-100">Laporan</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { label: 'Highlight', value: r.highlights },
+                          { label: 'Kendala', value: r.obstacles },
+                          { label: 'Rekomendasi', value: r.recommendation },
+                          { label: 'Rencana Berikutnya', value: r.nextPlan },
+                        ].map(f => f.value && (
+                          <div key={f.label} className="bg-slate-50 rounded-xl p-3">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">{f.label}</p>
+                            <p className="text-xs text-slate-700 leading-relaxed">{f.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* EKSPOR */}
           {section === 'ekspor' && (
             <div>
@@ -452,6 +516,40 @@ export default function PenelitiPage() {
 
         </div>
       </main>
+
+      {/* Mobile bottom nav */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 z-30 flex">
+        {navItems.map(n => {
+          const active = section === n.id
+          return (
+            <button key={n.id} onClick={() => setSection(n.id)}
+              className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 transition ${active ? 'text-primary-600' : 'text-slate-400'}`}>
+              <span className="text-lg leading-none">{n.emoji}</span>
+              <span className="text-[8px] font-semibold leading-none">{n.label.split(' ')[0]}</span>
+            </button>
+          )
+        })}
+      </nav>
+
+      {/* Logout confirm modal */}
+      {logoutConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+            <h2 className="text-base font-black text-slate-900 mb-1">Keluar dari akun?</h2>
+            <p className="text-sm text-slate-500 mb-5">Sesi Anda akan diakhiri. Pastikan semua pekerjaan sudah tersimpan.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setLogoutConfirm(false)}
+                className="flex-1 border border-slate-200 text-slate-600 font-semibold py-2.5 rounded-xl hover:bg-slate-50 transition text-sm">
+                Batal
+              </button>
+              <button onClick={doLogout}
+                className="flex-1 bg-red-600 text-white font-bold py-2.5 rounded-xl hover:bg-red-700 transition text-sm">
+                Ya, Keluar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

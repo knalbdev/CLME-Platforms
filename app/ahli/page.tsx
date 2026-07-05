@@ -1,21 +1,18 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { getSession, logout, getAllUsers } from '@/lib/auth'
-import { getDiscussions } from '@/lib/data'
-import { getProgress } from '@/lib/gamification'
-import type { User, Discussion } from '@/types'
+import { getSession, logout } from '@/lib/auth'
+import {
+  getFirestoreUsers, getFirestoreProgress, getFirestoreDiscussions,
+  getFieldNotes, saveFieldNote, saveFasilitatorReport,
+  type FieldNote as FSFieldNote,
+} from '@/lib/db'
+import type { User, Discussion, UserProgress } from '@/types'
 
 type Section = 'dashboard' | 'keterlibatan' | 'jadwal' | 'catatan' | 'diskusi' | 'laporan'
 type NoteCategory = 'aktivitas' | 'kendala' | 'temuan' | 'rekomendasi'
 
-interface FieldNote {
-  id: string
-  date: string
-  category: NoteCategory
-  body: string
-  location: string
-}
+type FieldNote = FSFieldNote & { id: string }
 
 interface ScheduleEvent {
   id: string
@@ -37,27 +34,22 @@ const CAT_LABELS: Record<NoteCategory, string> = {
   aktivitas: 'Aktivitas', kendala: 'Kendala', temuan: 'Temuan', rekomendasi: 'Rekomendasi',
 }
 
-const INITIAL_NOTES: FieldNote[] = [
-  { id: 'n1', date: '2026-06-20', category: 'aktivitas', body: 'Sesi pertama berjalan lancar. Semua peserta berhasil login ke platform dan menyelesaikan orientasi modul.', location: 'Lab Komputer SMP Negeri 1 Bandung' },
-  { id: 'n2', date: '2026-06-22', category: 'kendala', body: 'Budi mengalami kesulitan koneksi internet saat mengerjakan Modul 2. Perlu koordinasi dengan pihak sekolah untuk memperbaiki jaringan.', location: 'SMAN 5 Bandung' },
-  { id: 'n3', date: '2026-06-25', category: 'temuan', body: 'Peserta paling antusias saat mengikuti simulasi phishing. Sebagian besar belum pernah melihat contoh email phishing nyata sebelumnya.', location: 'SMPN 3 Bandung' },
-]
-
 const INITIAL_SCHEDULE: ScheduleEvent[] = [
   { id: 's1', title: 'Sesi Pendampingan Modul 3', date: '2026-07-02', time: '09:00', peserta: ['Sari Rahayu', 'Budi Hartono', 'Rini Wulandari'], note: 'Ingatkan peserta untuk menyelesaikan pre-test sebelum sesi dimulai', done: false },
   { id: 's2', title: 'Check-in Progress Peserta', date: '2026-07-05', time: '14:00', peserta: ['Sari Rahayu', 'Rini Wulandari'], note: 'Fokus pada peserta yang belum menyelesaikan Modul 2', done: false },
   { id: 's3', title: 'Rapat Koordinasi Fasilitator', date: '2026-06-15', time: '10:00', peserta: ['Semua Peserta'], note: '', done: true },
 ]
 
-const LAST_ACTIVE_DAYS: Record<string, number> = { P001: 0, P002: 2, P003: 5 }
 
 export default function FasilitatorPage() {
   const router = useRouter()
   const [section, setSection] = useState<Section>('dashboard')
   const [session, setSession] = useState<User | null>(null)
   const [pesertaList, setPesertaList] = useState<User[]>([])
+  const [progressMap, setProgressMap] = useState<Record<string, UserProgress>>({})
   const [discussions, setDiscussions] = useState<Discussion[]>([])
-  const [notes, setNotes] = useState<FieldNote[]>(INITIAL_NOTES)
+  const [logoutConfirm, setLogoutConfirm] = useState(false)
+  const [notes, setNotes] = useState<FieldNote[]>([])
   const [schedule, setSchedule] = useState<ScheduleEvent[]>(INITIAL_SCHEDULE)
 
   const [showNoteForm, setShowNoteForm] = useState(false)
@@ -77,16 +69,39 @@ export default function FasilitatorPage() {
   const flash = (msg: string) => { setSaveMsg(msg); setTimeout(() => setSaveMsg(''), 3000) }
 
   useEffect(() => {
-    const s = getSession()
-    if (!s || s.role !== 'ahli') { router.push('/'); return }
-    setSession(s)
-    setDiscussions(getDiscussions())
-    setPesertaList(getAllUsers().filter(u => u.role === 'peserta'))
+    const load = async () => {
+      const s = getSession()
+      if (!s || s.role !== 'ahli') { router.push('/login'); return }
+      setSession(s)
+      const [disc, fieldNotes, fsUsers] = await Promise.all([
+        getFirestoreDiscussions(),
+        getFieldNotes(s.id),
+        getFirestoreUsers(),
+      ])
+      setDiscussions(disc)
+      setNotes(fieldNotes as FieldNote[])
+      const users = fsUsers
+      const peserta = users.filter((u: User) => u.role === 'peserta')
+      setPesertaList(peserta)
+      const map: Record<string, UserProgress> = {}
+      await Promise.all(peserta.map(async (u: User) => {
+        const p = await getFirestoreProgress(u.id)
+        if (p) map[u.id] = p
+      }))
+      setProgressMap(map)
+    }
+    load()
   }, [router])
 
-  const handleLogout = () => { logout(); router.push('/') }
+  const handleLogout = () => setLogoutConfirm(true)
+  const doLogout = () => { logout(); router.push('/login') }
 
-  const getLastActiveDays = (userId: string) => LAST_ACTIVE_DAYS[userId] ?? 1
+  const getLastActiveDays = (userId: string) => {
+    const prog = progressMap[userId]
+    if (!prog?.dates?.length) return 0
+    const lastMs = Math.max(...prog.dates.map(d => new Date(d).getTime()))
+    return Math.floor((Date.now() - lastMs) / 86_400_000)
+  }
   const getLastActiveLabel = (userId: string) => {
     const days = getLastActiveDays(userId)
     const d = new Date()
@@ -95,21 +110,23 @@ export default function FasilitatorPage() {
   }
   const needsFollowUp = (userId: string) => getLastActiveDays(userId) >= 3
 
-  const progresses = pesertaList.map(u => ({ user: u, progress: getProgress(u.id) }))
+  const emptyProg = (uid: string): UserProgress => ({ uid, xp: 0, level: 1, streak: 1, badges: [], done: [], modules: [], scores: {}, dates: [] })
+  const progresses = pesertaList.map(u => ({ user: u, progress: progressMap[u.id] ?? emptyProg(u.id) }))
   const avgXP = progresses.length ? Math.round(progresses.reduce((s, p) => s + p.progress.xp, 0) / progresses.length) : 0
   const activeCount = progresses.filter(p => !needsFollowUp(p.user.id)).length
   const followUpCount = progresses.filter(p => needsFollowUp(p.user.id)).length
 
-  const handleAddNote = () => {
-    if (!noteForm.body.trim()) return
-    const n: FieldNote = {
-      id: `n_${Date.now()}`,
+  const handleAddNote = async () => {
+    if (!noteForm.body.trim() || !session) return
+    const payload = {
+      facilitatorId: session.id,
       date: new Date().toISOString().split('T')[0],
       category: noteForm.category,
       body: noteForm.body.trim(),
       location: noteForm.location.trim() || 'Tidak disebutkan',
     }
-    setNotes(prev => [n, ...prev])
+    const id = await saveFieldNote(payload)
+    setNotes(prev => [{ id, ...payload }, ...prev])
     setNoteForm({ category: 'aktivitas', body: '', location: '' })
     setShowNoteForm(false)
     flash('Catatan lapangan berhasil disimpan.')
@@ -125,13 +142,21 @@ export default function FasilitatorPage() {
     flash('Pengingat berhasil dikirim.')
   }
 
-  const handleSendReport = () => {
-    if (!reportForm.highlights.trim()) return
-    setSentReports(prev => [{
-      id: `rep_${Date.now()}`,
-      period: reportForm.period || 'Periode tidak disebutkan',
-      sentAt: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
-    }, ...prev])
+  const handleSendReport = async () => {
+    if (!reportForm.highlights.trim() || !session) return
+    const sentAt = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+    const period = reportForm.period || 'Periode tidak disebutkan'
+    await saveFasilitatorReport({
+      facilitatorId: session.id,
+      facilitatorName: session.name,
+      period,
+      highlights: reportForm.highlights.trim(),
+      obstacles: reportForm.obstacles.trim(),
+      recommendation: reportForm.recommendation.trim(),
+      nextPlan: reportForm.nextPlan.trim(),
+      sentAt,
+    })
+    setSentReports(prev => [{ id: `rep_${Date.now()}`, period, sentAt }, ...prev])
     setReportForm({ period: '', highlights: '', obstacles: '', recommendation: '', nextPlan: '' })
     flash('Laporan berhasil dikirim ke Peneliti.')
   }
@@ -156,10 +181,10 @@ export default function FasilitatorPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {/* ── Sidebar ─────────────────────────────────── */}
-      <aside className="w-64 bg-white border-r border-slate-100 flex flex-col shadow-sm flex-none">
+      <aside className="hidden md:flex w-64 bg-white border-r border-slate-100 flex-col shadow-sm flex-none">
         <div className="px-5 py-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white">🛡️</div>
+            <img src="/logo.png" alt="CLME" className="w-9 h-9 object-contain flex-none" />
             <div>
               <p className="text-sm font-black text-slate-900 leading-none">CLME</p>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Fasilitator</p>
@@ -196,8 +221,14 @@ export default function FasilitatorPage() {
       </aside>
 
       {/* ── Main ────────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="p-6 max-w-5xl mx-auto">
+      <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+        {/* Mobile section header */}
+        <div className="md:hidden sticky top-0 z-10 bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3">
+          <img src="/logo.png" alt="CLME" className="w-7 h-7 object-contain flex-none" />
+          <p className="text-sm font-bold text-slate-800">CLME · Fasilitator</p>
+          <span className="ml-auto text-base">{navItems.find(n => n.id === section)?.emoji}</span>
+        </div>
+        <div className="p-4 md:p-6 max-w-5xl mx-auto">
 
           {saveMsg && (
             <div className="mb-4 bg-primary-50 border border-primary-200 text-primary-700 text-sm px-4 py-3 rounded-xl flex items-center gap-2">
@@ -709,6 +740,40 @@ export default function FasilitatorPage() {
 
         </div>
       </main>
+
+      {/* Mobile bottom nav */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 z-30 flex">
+        {navItems.map(n => {
+          const active = section === n.id
+          return (
+            <button key={n.id} onClick={() => setSection(n.id)}
+              className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 transition ${active ? 'text-primary-600' : 'text-slate-400'}`}>
+              <span className="text-lg leading-none">{n.emoji}</span>
+              <span className="text-[8px] font-semibold leading-none">{n.label.split(' ')[0]}</span>
+            </button>
+          )
+        })}
+      </nav>
+
+      {/* Logout confirm modal */}
+      {logoutConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+            <h2 className="text-base font-black text-slate-900 mb-1">Keluar dari akun?</h2>
+            <p className="text-sm text-slate-500 mb-5">Sesi Anda akan diakhiri. Pastikan semua pekerjaan sudah tersimpan.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setLogoutConfirm(false)}
+                className="flex-1 border border-slate-200 text-slate-600 font-semibold py-2.5 rounded-xl hover:bg-slate-50 transition text-sm">
+                Batal
+              </button>
+              <button onClick={doLogout}
+                className="flex-1 bg-red-600 text-white font-bold py-2.5 rounded-xl hover:bg-red-700 transition text-sm">
+                Ya, Keluar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

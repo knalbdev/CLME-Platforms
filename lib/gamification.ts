@@ -1,4 +1,5 @@
 import type { UserProgress, LevelInfo, BadgeInfo } from '@/types'
+import { saveProgressToFirestore } from './db'
 
 export const LEVELS: LevelInfo[] = [
   { level: 1, name: 'Pemula',           emoji: '🌱', minXP: 0    },
@@ -9,13 +10,16 @@ export const LEVELS: LevelInfo[] = [
 ]
 
 export const BADGES: Record<string, BadgeInfo> = {
-  pemula:   { name: 'Pemula',           emoji: '🎯', color: 'bg-emerald-50 text-emerald-700',  desc: 'Bergabung dengan CLME' },
-  pretest:  { name: 'Pre-Test',         emoji: '📋', color: 'bg-amber-50 text-amber-700',      desc: 'Selesaikan pre-test pertama' },
-  diskusi:  { name: 'Diskusi Aktif',    emoji: '💬', color: 'bg-violet-50 text-violet-700',    desc: 'Berpartisipasi dalam diskusi' },
-  guardian: { name: 'Password Guardian',emoji: '🔐', color: 'bg-emerald-50 text-emerald-700',  desc: 'Selesaikan Modul 1' },
-  emaildef: { name: 'Email Defender',   emoji: '🛡️', color: 'bg-blue-50 text-blue-700',        desc: 'Selesaikan Modul 2' },
-  crisis:   { name: 'Crisis Responder', emoji: '🚨', color: 'bg-red-50 text-red-700',          desc: 'Selesaikan Modul 3' },
-  graduate: { name: 'CLME Graduate',    emoji: '🎓', color: 'bg-navy-900 text-white',           desc: 'Selesaikan semua modul' },
+  pemula:     { name: 'Pemula',            emoji: '🎯', color: 'bg-emerald-50 text-emerald-700',  desc: 'Bergabung dengan CLME' },
+  pretest:    { name: 'Pre-Test',          emoji: '📋', color: 'bg-amber-50 text-amber-700',      desc: 'Selesaikan pre-test pertama' },
+  diskusi:    { name: 'Diskusi Aktif',     emoji: '💬', color: 'bg-violet-50 text-violet-700',    desc: 'Berpartisipasi dalam diskusi' },
+  literasi:   { name: 'Cyber Literate',   emoji: '🌐', color: 'bg-sky-50 text-sky-700',          desc: 'Selesaikan Modul 1' },
+  guardian:   { name: 'Password Guardian',emoji: '🔐', color: 'bg-emerald-50 text-emerald-700',  desc: 'Selesaikan Modul 2' },
+  safesurf:   { name: 'Safe Surfer',      emoji: '🌊', color: 'bg-cyan-50 text-cyan-700',        desc: 'Selesaikan Modul 3' },
+  socialsafe: { name: 'Social Guard',     emoji: '📱', color: 'bg-purple-50 text-purple-700',    desc: 'Selesaikan Modul 4' },
+  crisis:     { name: 'Crisis Responder', emoji: '🚨', color: 'bg-red-50 text-red-700',          desc: 'Selesaikan Modul 5' },
+  sysguard:   { name: 'System Guard',     emoji: '⚙️', color: 'bg-indigo-50 text-indigo-700',    desc: 'Selesaikan Modul 6' },
+  graduate:   { name: 'CLME Graduate',    emoji: '🎓', color: 'bg-navy-900 text-white',           desc: 'Selesaikan semua modul' },
 }
 
 const KEY = (uid: string) => `clme_prog_${uid}`
@@ -37,6 +41,7 @@ function defaultProgress(uid: string): UserProgress {
 
 export function saveProgress(uid: string, p: UserProgress) {
   if (typeof window !== 'undefined') localStorage.setItem(KEY(uid), JSON.stringify(p))
+  saveProgressToFirestore(uid, p) // background sync — fire and forget
 }
 
 export function getLevel(xp: number): LevelInfo {
@@ -65,8 +70,11 @@ export function addXP(uid: string, amount: number, badgeId?: string): { p: UserP
 
 export function markLesson(uid: string, lessonId: string, xp: number, badgeId?: string) {
   const p = getProgress(uid)
-  if (!p.done.includes(lessonId)) p.done.push(lessonId)
+  const alreadyDone = p.done.includes(lessonId)
+  if (!alreadyDone) p.done.push(lessonId)
   saveProgress(uid, p)
+  // XP only awarded on first completion
+  if (alreadyDone) return { p, leveledUp: false, newLevel: getLevel(p.xp) }
   return addXP(uid, xp, badgeId)
 }
 
