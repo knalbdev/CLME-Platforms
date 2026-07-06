@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 200" font-family="system-ui,-apple-system,sans-serif">
+  <rect width="760" height="200" rx="16" fill="#fff1f2"/>
+  <text x="380" y="28" text-anchor="middle" font-size="13" font-weight="800" fill="#7f1d1d">Cara Kerja Ransomware — 4 Tahap Serangan</text>
+  <text x="380" y="44" text-anchor="middle" font-size="10" fill="#b91c1c">Memahami cara kerjanya adalah kunci untuk mencegah dan merespons dengan benar</text>
+
+  <!-- Stage 1 -->
+  <rect x="10" y="56" width="170" height="134" rx="12" fill="#fee2e2" stroke="#fca5a5" stroke-width="1.5"/>
+  <rect x="10" y="56" width="170" height="36" rx="12" fill="#dc2626"/>
+  <rect x="10" y="80" width="170" height="12" fill="#dc2626"/>
+  <text x="95" y="78" text-anchor="middle" font-size="12" font-weight="800" fill="white">① MASUK</text>
+  <text x="95" y="116" text-anchor="middle" font-size="20">📧</text>
+  <text x="95" y="142" text-anchor="middle" font-size="10" fill="#7f1d1d" font-weight="700">Via phishing email</text>
+  <text x="95" y="156" text-anchor="middle" font-size="9" fill="#991b1b">atau unduhan</text>
+  <text x="95" y="170" text-anchor="middle" font-size="9" fill="#991b1b">dari situs berbahaya</text>
+  <text x="95" y="184" text-anchor="middle" font-size="8" fill="#b91c1c">🔑 Sering tak terdeteksi</text>
+
+  <!-- Arrow -->
+  <text x="188" y="130" font-size="22" fill="#ef4444">→</text>
+
+  <!-- Stage 2 -->
+  <rect x="200" y="56" width="170" height="134" rx="12" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+  <rect x="200" y="56" width="170" height="36" rx="12" fill="#c2410c"/>
+  <rect x="200" y="80" width="170" height="12" fill="#c2410c"/>
+  <text x="285" y="78" text-anchor="middle" font-size="12" font-weight="800" fill="white">② ENKRIPSI</text>
+  <text x="285" y="116" text-anchor="middle" font-size="20">🔒</text>
+  <text x="285" y="142" text-anchor="middle" font-size="10" fill="#7c2d12" font-weight="700">Semua file dikunci</text>
+  <text x="285" y="156" text-anchor="middle" font-size="9" fill="#9a3412">Dokumen, foto, nilai</text>
+  <text x="285" y="170" text-anchor="middle" font-size="9" fill="#9a3412">berubah jadi .encrypted</text>
+  <text x="285" y="184" text-anchor="middle" font-size="8" fill="#c2410c">⚡ Terjadi dalam menit</text>
+
+  <!-- Arrow -->
+  <text x="378" y="130" font-size="22" fill="#ef4444">→</text>
+
+  <!-- Stage 3 -->
+  <rect x="390" y="56" width="170" height="134" rx="12" fill="#fef9c3" stroke="#fef08a" stroke-width="1.5"/>
+  <rect x="390" y="56" width="170" height="36" rx="12" fill="#a16207"/>
+  <rect x="390" y="80" width="170" height="12" fill="#a16207"/>
+  <text x="475" y="78" text-anchor="middle" font-size="12" font-weight="800" fill="white">③ TEBUSAN</text>
+  <text x="475" y="116" text-anchor="middle" font-size="20">💰</text>
+  <text x="475" y="142" text-anchor="middle" font-size="10" fill="#713f12" font-weight="700">Layar merah muncul</text>
+  <text x="475" y="156" text-anchor="middle" font-size="9" fill="#854d0e">Countdown timer 48–72 jam</text>
+  <text x="475" y="170" text-anchor="middle" font-size="9" fill="#854d0e">Bayar crypto = $500–$5000</text>
+  <text x="475" y="184" text-anchor="middle" font-size="8" fill="#a16207">🚫 FBI: JANGAN BAYAR!</text>
+
+  <!-- Arrow -->
+  <text x="568" y="130" font-size="22" fill="#ef4444">→</text>
+
+  <!-- Stage 4 -->
+  <rect x="580" y="56" width="170" height="134" rx="12" fill="#fdf4ff" stroke="#e9d5ff" stroke-width="1.5"/>
+  <rect x="580" y="56" width="170" height="36" rx="12" fill="#7e22ce"/>
+  <rect x="580" y="80" width="170" height="12" fill="#7e22ce"/>
+  <text x="665" y="78" text-anchor="middle" font-size="12" font-weight="800" fill="white">④ ANCAMAN GANDA</text>
+  <text x="665" y="116" text-anchor="middle" font-size="20">😱</text>
+  <text x="665" y="142" text-anchor="middle" font-size="10" fill="#581c87" font-weight="700">File tetap terkunci</text>
+  <text x="665" y="156" text-anchor="middle" font-size="9" fill="#6b21a8">+ ancaman publikasi</text>
+  <text x="665" y="170" text-anchor="middle" font-size="9" fill="#6b21a8">data ke internet</text>
+  <text x="665" y="184" text-anchor="middle" font-size="8" fill="#7c3aed">🛡️ Backup = satu-satunya jalan</text>
+</svg>

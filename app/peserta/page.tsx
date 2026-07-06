@@ -622,12 +622,22 @@ export default function PesertaPage() {
             <span className="text-[10px] text-slate-400">{l.dur}</span>
           </div>
           <div className="space-y-4">
-            {l.content.sections?.map((s, i) => (
+            {l.content.sections?.map((s, i) => {
+              if (s.type === 'image') {
+                return (
+                  <div key={i} className="rounded-xl overflow-hidden border border-slate-200 bg-white">
+                    <img src={s.src} alt={s.alt || ''} className="w-full h-auto" />
+                    {s.caption && <p className="text-xs text-slate-500 text-center px-3 py-2">{s.caption}</p>}
+                  </div>
+                )
+              }
+              return (
               <div key={i} className={sectionStyles[s.type] || sectionStyles.text}>
                 {s.title && <p className="text-xs font-bold mb-1 opacity-70 uppercase tracking-wide">{s.title}</p>}
-                <div className="text-sm" dangerouslySetInnerHTML={{ __html: s.text }} />
+                <div className="text-sm" dangerouslySetInnerHTML={{ __html: s.text || '' }} />
               </div>
-            ))}
+              )
+            })}
           </div>
           {progress.done.includes(l.id) ? (
             <div className="mt-6 w-full bg-primary-50 border border-primary-200 text-primary-700 font-bold py-3.5 rounded-xl text-center">
@@ -789,7 +799,7 @@ export default function PesertaPage() {
                 <span className="text-2xl font-black text-primary-600">{pct}%</span>
               </div>
               <p className="text-sm text-slate-600 mb-6">
-                {pct === 100 ? 'Sempurna! Anda sangat jago mendeteksi phishing.' : pct >= 70 ? 'Bagus! Tetap waspada terhadap email mencurigakan.' : 'Perlu latihan lagi. Selalu periksa domain dan jangan terburu-buru.'}
+                {pct === 100 ? 'Sempurna! Anda sangat jago mendeteksi konten berbahaya.' : pct >= 70 ? 'Bagus! Tetap waspada terhadap konten yang mencurigakan.' : 'Perlu latihan lagi. Selalu periksa detail sebelum mengambil tindakan.'}
               </p>
               {progress.done.includes(l.id) ? (
                 <div className="w-full bg-primary-50 border border-primary-200 text-primary-700 font-bold py-3.5 rounded-xl text-center">
@@ -840,14 +850,16 @@ export default function PesertaPage() {
               </button>
               <button onClick={() => handleSimAnswer('phishing')}
                 className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 font-bold py-3 rounded-xl transition text-sm">
-                🚨 Phishing
+                🚨 Tidak Aman
               </button>
             </div>
           ) : (
             <div>
               <div className={`rounded-xl p-4 mb-3 border ${simCorrect ? 'bg-primary-50 border-primary-200' : 'bg-red-50 border-red-200'}`}>
                 <p className={`text-xs font-bold mb-2 ${simCorrect ? 'text-primary-700' : 'text-red-700'}`}>
-                  {simCorrect ? '✓ Benar! Ini memang phishing.' : '✗ Salah! Ini adalah phishing.'}
+                  {simCorrect
+                    ? (sc.verdict === 'safe' ? '✓ Benar! Konten ini aman.' : '✓ Benar! Ini tidak aman.')
+                    : (sc.verdict === 'safe' ? '✗ Salah! Konten ini sebenarnya aman.' : '✗ Salah! Ini tidak aman — waspadai ciri-cirinya.')}
                 </p>
                 <div className="space-y-1 mb-3">
                   {sc.flags.map((f, i) => (
@@ -1023,7 +1035,7 @@ export default function PesertaPage() {
       </div>
       {/* Filter */}
       <div className="px-4 mb-3 flex gap-2 overflow-x-auto scrollbar-hidden">
-        {[{ id: null, label: 'Semua' }, { id: 'm1', label: 'M1' }, { id: 'm2', label: 'M2' }, { id: 'm3', label: 'M3' }].map(f => (
+        {([{ id: null, label: 'Semua' }, { id: 'm1', label: 'Modul 1' }, { id: 'm2', label: 'Modul 2' }, { id: 'm3', label: 'Modul 3' }, { id: 'm4', label: 'Modul 4' }, { id: 'm5', label: 'Modul 5' }, { id: 'm6', label: 'Modul 6' }] as { id: string | null; label: string }[]).map(f => (
           <button key={String(f.id)} onClick={() => setDiscFilter(f.id)}
             className={`flex-none px-3 py-1 rounded-full text-xs font-semibold transition ${discFilter === f.id ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
             {f.label}
@@ -1039,7 +1051,7 @@ export default function PesertaPage() {
                 <p className="text-sm font-bold text-slate-800 leading-tight">{d.title}</p>
                 <p className="text-[10px] text-slate-400 mt-0.5">{d.userName} · {d.time}</p>
               </div>
-              <span className="text-[9px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full flex-none">{d.moduleId.toUpperCase()}</span>
+              <span className="text-[9px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full flex-none">{`Modul ${d.moduleId.slice(1)}`}</span>
             </div>
             <p className="text-xs text-slate-600 leading-relaxed mb-3 line-clamp-2">{d.body}</p>
             {/* Replies */}

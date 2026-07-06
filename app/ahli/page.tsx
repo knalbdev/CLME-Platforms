@@ -5,6 +5,7 @@ import { getSession, logout } from '@/lib/auth'
 import {
   getFirestoreUsers, getFirestoreProgress, getFirestoreDiscussions,
   getFieldNotes, saveFieldNote, saveFasilitatorReport,
+  forwardDiscussionToPeneliti,
   type FieldNote as FSFieldNote,
 } from '@/lib/db'
 import type { User, Discussion, UserProgress } from '@/types'
@@ -65,8 +66,25 @@ export default function FasilitatorPage() {
   const [sentReports, setSentReports] = useState<{ id: string; period: string; sentAt: string }[]>([])
 
   const [saveMsg, setSaveMsg] = useState('')
+  const [forwardedIds, setForwardedIds] = useState<Set<string>>(new Set())
 
   const flash = (msg: string) => { setSaveMsg(msg); setTimeout(() => setSaveMsg(''), 3000) }
+
+  const handleForwardToPeneliti = async (d: Discussion) => {
+    if (!session || forwardedIds.has(d.id)) return
+    await forwardDiscussionToPeneliti({
+      discussionId: d.id,
+      title: d.title,
+      body: d.body,
+      userName: d.userName,
+      moduleId: d.moduleId,
+      forwardedBy: session.name,
+      forwardedAt: new Date().toISOString(),
+      note: '',
+    })
+    setForwardedIds(prev => new Set(Array.from(prev).concat(d.id)))
+    flash(`Diskusi "${d.title}" diteruskan ke Peneliti.`)
+  }
 
   useEffect(() => {
     const load = async () => {
@@ -641,8 +659,11 @@ export default function FasilitatorPage() {
                           <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${d.replies.length > 0 ? 'bg-primary-100 text-primary-700' : 'bg-slate-100 text-slate-500'}`}>
                             {d.replies.length > 0 ? `${d.replies.length} Balasan` : 'Belum ada balasan'}
                           </span>
-                          <button className="text-[10px] font-bold border border-slate-200 text-slate-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 px-3 py-1 rounded-lg transition">
-                            Teruskan ke Peneliti
+                          <button
+                            onClick={() => handleForwardToPeneliti(d)}
+                            disabled={forwardedIds.has(d.id)}
+                            className={`text-[10px] font-bold border px-3 py-1 rounded-lg transition ${forwardedIds.has(d.id) ? 'border-primary-200 bg-primary-50 text-primary-600 cursor-default' : 'border-slate-200 text-slate-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700'}`}>
+                            {forwardedIds.has(d.id) ? '✓ Diteruskan' : 'Teruskan ke Peneliti'}
                           </button>
                         </div>
                       </div>

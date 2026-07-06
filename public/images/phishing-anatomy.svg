@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 340" font-family="system-ui,-apple-system,sans-serif">
+  <rect width="760" height="340" rx="16" fill="#fef2f2"/>
+
+  <!-- Title -->
+  <text x="380" y="32" text-anchor="middle" font-size="14" font-weight="800" fill="#7f1d1d">Anatomi Email Phishing</text>
+  <text x="380" y="50" text-anchor="middle" font-size="11" fill="#b91c1c">Kenali ciri-ciri email berbahaya ini!</text>
+
+  <!-- Email mockup -->
+  <rect x="40" y="64" width="680" height="264" rx="12" fill="white" stroke="#fca5a5" stroke-width="2"/>
+
+  <!-- Email header bar -->
+  <rect x="40" y="64" width="680" height="40" rx="12" fill="#fee2e2"/>
+  <rect x="40" y="84" width="680" height="20" fill="#fee2e2"/>
+  <circle cx="68" cy="84" r="8" fill="#ef4444"/>
+  <circle cx="92" cy="84" r="8" fill="#f97316"/>
+  <circle cx="116" cy="84" r="8" fill="#22c55e"/>
+  <text x="380" y="89" text-anchor="middle" font-size="11" fill="#7f1d1d" font-weight="700">📧 Inbox - Email Klien</text>
+
+  <!-- From field -->
+  <text x="65" y="124" font-size="10" fill="#6b7280">Dari:</text>
+  <text x="100" y="124" font-size="10" fill="#1d4ed8" text-decoration="underline">noreply@bank-bri-official.info</text>
+  <rect x="265" y="111" width="120" height="18" rx="4" fill="#fef08a" stroke="#eab308" stroke-width="1"/>
+  <text x="275" y="123" font-size="9" fill="#713f12" font-weight="700">⚠️ Domain palsu!</text>
+
+  <!-- Arrow 1 -->
+  <line x1="265" y1="120" x2="248" y2="120" stroke="#ef4444" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Subject -->
+  <text x="65" y="148" font-size="10" fill="#6b7280">Subjek:</text>
+  <text x="110" y="148" font-size="11" fill="#111827" font-weight="700">🚨 AKUN ANDA AKAN DIBLOKIR - VERIFIKASI SEKARANG!!!</text>
+
+  <!-- Badge 1 -->
+  <rect x="65" y="156" width="180" height="18" rx="4" fill="#fef08a" stroke="#eab308" stroke-width="1"/>
+  <text x="75" y="168" font-size="9" fill="#713f12" font-weight="700">⚠️ Urgensi buatan — tekanan palsu</text>
+
+  <!-- Divider -->
+  <line x1="65" y1="185" x2="695" y2="185" stroke="#e5e7eb" stroke-width="1"/>
+
+  <!-- Email body -->
+  <text x="65" y="208" font-size="11" fill="#374151">Yth. Nasabah Terhormat,</text>
+  <text x="65" y="228" font-size="10" fill="#374151">Kami mendeteksi aktivitas mencurigakan pada akun Anda. Klik tombol</text>
+  <text x="65" y="244" font-size="10" fill="#374151">di bawah untuk verifikasi SEGERA dalam 24 jam atau akun Anda DIBLOKIR.</text>
+
+  <!-- CTA Button (fake) -->
+  <rect x="65" y="256" width="200" height="34" rx="8" fill="#1d4ed8"/>
+  <text x="165" y="277" text-anchor="middle" font-size="12" fill="white" font-weight="700">Klik di Sini → Verifikasi</text>
+
+  <!-- Badge 2 -->
+  <rect x="280" y="258" width="165" height="30" rx="4" fill="#fef08a" stroke="#eab308" stroke-width="1"/>
+  <text x="288" y="270" font-size="9" fill="#713f12" font-weight="700">⚠️ URL menuju situs palsu:</text>
+  <text x="288" y="283" font-size="9" fill="#dc2626">http://bri-login.xyz/verify</text>
+
+  <!-- Footer warning -->
+  <text x="65" y="316" font-size="10" fill="#6b7280">Salam, Tim Keamanan BRI</text>
+  <rect x="380" y="304" width="300" height="20" rx="4" fill="#fee2e2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="390" y="317" font-size="9" fill="#b91c1c" font-weight="700">⚠️ Bank asli TIDAK pernah minta klik email!</text>
+
+  <!-- Arrow marker definition -->
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/>
+    </marker>
+  </defs>
+</svg>

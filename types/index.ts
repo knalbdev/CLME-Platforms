@@ -37,12 +37,15 @@ export interface BadgeInfo {
   desc: string
 }
 
-export type ContentSectionType = 'intro' | 'text' | 'case' | 'stat' | 'warning' | 'tip'
+export type ContentSectionType = 'intro' | 'text' | 'case' | 'stat' | 'warning' | 'tip' | 'image'
 
 export interface ContentSection {
   type: ContentSectionType
   title?: string
-  text: string
+  text?: string
+  src?: string
+  alt?: string
+  caption?: string
 }
 
 export interface QuizOption {

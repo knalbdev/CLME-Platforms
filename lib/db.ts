@@ -2,8 +2,17 @@ import {
   collection, getDocs, doc, getDoc, setDoc, addDoc,
   query, orderBy, serverTimestamp, Timestamp,
 } from 'firebase/firestore'
-import { db } from './firebase'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { db, storage } from './firebase'
 import type { User, UserProgress, Discussion, DiscussionReply, Lesson } from '@/types'
+
+export async function uploadLessonImage(file: File, moduleId: string): Promise<string> {
+  const ext = file.name.split('.').pop()
+  const path = `lesson-images/${moduleId}/${Date.now()}.${ext}`
+  const storageRef = ref(storage, path)
+  await uploadBytes(storageRef, file)
+  return getDownloadURL(storageRef)
+}
 
 export interface ModuleMeta {
   id: string
@@ -146,6 +155,53 @@ export async function addFirestoreReply(discussionId: string, reply: DiscussionR
     const replies: DiscussionReply[] = (snap.data().replies as DiscussionReply[]) ?? []
     await setDoc(ref, { ...snap.data(), replies: [...replies, reply] })
   } catch { /* silent */ }
+}
+
+// ── User management ──────────────────────────────────────────
+
+export async function approveUser(uid: string): Promise<void> {
+  try {
+    const ref = doc(db, 'users', uid)
+    const snap = await getDoc(ref)
+    if (snap.exists()) await setDoc(ref, { ...snap.data(), status: 'active' })
+  } catch { /* silent */ }
+}
+
+export async function getPendingUsers(): Promise<User[]> {
+  try {
+    const snap = await getDocs(collection(db, 'users'))
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as User & { status?: string }))
+      .filter(u => (u as unknown as { status?: string }).status === 'pending')
+  } catch { return [] }
+}
+
+// ── Forward discussions to peneliti ──────────────────────────
+
+export interface ForwardedDiscussion {
+  id?: string
+  discussionId: string
+  title: string
+  body: string
+  userName: string
+  moduleId: string
+  forwardedBy: string
+  forwardedAt: string
+  note: string
+}
+
+export async function forwardDiscussionToPeneliti(fd: Omit<ForwardedDiscussion, 'id'>): Promise<void> {
+  try {
+    await addDoc(collection(db, 'forwardedDiscussions'), fd)
+  } catch { /* silent */ }
+}
+
+export async function getForwardedDiscussions(): Promise<ForwardedDiscussion[]> {
+  try {
+    const q = query(collection(db, 'forwardedDiscussions'), orderBy('forwardedAt', 'desc'))
+    const snap = await getDocs(q)
+    return snap.docs.map(d => ({ id: d.id, ...d.data() } as ForwardedDiscussion))
+  } catch { return [] }
 }
 
 // ── AI Config ────────────────────────────────────────────────

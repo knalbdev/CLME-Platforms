@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 300" font-family="system-ui,-apple-system,sans-serif">
+  <rect width="760" height="300" rx="16" fill="#f8fafc"/>
+  <text x="380" y="32" text-anchor="middle" font-size="14" font-weight="800" fill="#0f172a">Pengaturan Privasi Wajib — Instagram &amp; WhatsApp</text>
+  <text x="380" y="50" text-anchor="middle" font-size="11" fill="#64748b">Selesaikan dalam 15 menit. Lakukan sekarang!</text>
+
+  <!-- Instagram column -->
+  <rect x="20" y="64" width="350" height="224" rx="12" fill="white" stroke="#e5e7eb" stroke-width="1.5"/>
+  <rect x="20" y="64" width="350" height="40" rx="12" fill="#7c3aed"/>
+  <rect x="20" y="92" width="350" height="12" fill="#7c3aed"/>
+  <text x="195" y="88" text-anchor="middle" font-size="13" font-weight="800" fill="white">📷 Instagram</text>
+  <text x="195" y="102" text-anchor="middle" font-size="10" fill="#ddd6fe">Settings → Privacy</text>
+
+  <text x="40" y="130" font-size="18">✅</text>
+  <text x="70" y="128" font-size="11" font-weight="700" fill="#111827">Akun Pribadi (Private)</text>
+  <text x="70" y="142" font-size="10" fill="#6b7280">Hanya followers disetujui yang bisa melihat konten</text>
+
+  <text x="40" y="168" font-size="18">✅</text>
+  <text x="70" y="166" font-size="11" font-weight="700" fill="#111827">Activity Status → OFF</text>
+  <text x="70" y="180" font-size="10" fill="#6b7280">Sembunyikan kapan Anda sedang online</text>
+
+  <text x="40" y="206" font-size="18">✅</text>
+  <text x="70" y="204" font-size="11" font-weight="700" fill="#111827">Tag Foto → Add Manually</text>
+  <text x="70" y="218" font-size="10" fill="#6b7280">Approve tag sebelum muncul di profil Anda</text>
+
+  <text x="40" y="244" font-size="18">✅</text>
+  <text x="70" y="242" font-size="11" font-weight="700" fill="#111827">Two-Factor Authentication → ON</text>
+  <text x="70" y="256" font-size="10" fill="#6b7280">Settings → Security → Two-Factor Auth</text>
+
+  <text x="40" y="278" font-size="18">✅</text>
+  <text x="70" y="276" font-size="11" font-weight="700" fill="#111827">Mentions → People You Follow</text>
+  <text x="70" y="290" font-size="10" fill="#6b7280">Batasi siapa yang bisa mention Anda</text>
+
+  <!-- WhatsApp column -->
+  <rect x="390" y="64" width="350" height="224" rx="12" fill="white" stroke="#e5e7eb" stroke-width="1.5"/>
+  <rect x="390" y="64" width="350" height="40" rx="12" fill="#15803d"/>
+  <rect x="390" y="92" width="350" height="12" fill="#15803d"/>
+  <text x="565" y="88" text-anchor="middle" font-size="13" font-weight="800" fill="white">💬 WhatsApp</text>
+  <text x="565" y="102" text-anchor="middle" font-size="10" fill="#bbf7d0">Settings → Privacy</text>
+
+  <text x="410" y="130" font-size="18">✅</text>
+  <text x="440" y="128" font-size="11" font-weight="700" fill="#111827">Last Seen → My Contacts</text>
+  <text x="440" y="142" font-size="10" fill="#6b7280">Sembunyikan waktu online dari orang asing</text>
+
+  <text x="410" y="168" font-size="18">✅</text>
+  <text x="440" y="166" font-size="11" font-weight="700" fill="#111827">Foto Profil → My Contacts</text>
+  <text x="440" y="180" font-size="10" fill="#6b7280">Hanya kontak yang bisa melihat foto Anda</text>
+
+  <text x="410" y="206" font-size="18">✅</text>
+  <text x="440" y="204" font-size="11" font-weight="700" fill="#111827">Groups → My Contacts</text>
+  <text x="440" y="218" font-size="10" fill="#6b7280">Cegah ditambahkan ke grup sembarangan</text>
+
+  <text x="410" y="244" font-size="18">✅</text>
+  <text x="440" y="242" font-size="11" font-weight="700" fill="#111827">Two-Step Verification → ON</text>
+  <text x="440" y="256" font-size="10" fill="#6b7280">Account → Two-step verification → PIN 6 digit</text>
+
+  <text x="410" y="278" font-size="18">✅</text>
+  <text x="440" y="276" font-size="11" font-weight="700" fill="#111827">Read Receipts → OFF (opsional)</text>
+  <text x="440" y="290" font-size="10" fill="#6b7280">Sembunyikan tanda baca pesan</text>
+</svg>

@@ -77,6 +77,12 @@ export async function loginWithFirebase(
     }
 
     const data = snap.data()
+
+    if (data.status === 'pending') {
+      await firebaseSignOut(auth)
+      return { success: false, error: 'Akun Anda sedang menunggu persetujuan admin. Silakan tunggu konfirmasi.' }
+    }
+
     const user: User = {
       id: cred.user.uid,
       name: data.name,
@@ -137,14 +143,14 @@ export async function registerPeserta(data: {
       role: 'peserta',
       avatar,
       school: data.school,
+      status: 'pending',
       createdAt: new Date().toISOString(),
     })
 
-    // Initialize empty progress document immediately on registration
     await setDoc(doc(db, 'progress', cred.user.uid), defaultProgress(cred.user.uid))
+    await firebaseSignOut(auth)
 
-    saveSession(user)
-    return { success: true, user }
+    return { success: false, error: '__PENDING__' }
   } catch (err: unknown) {
     const code = (err as { code?: string }).code ?? ''
     if (code === 'auth/email-already-in-use') {

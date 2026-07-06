@@ -1,8 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { getSession, logout } from '@/lib/auth'
-import { getFirestoreUsers, getFirestoreProgress, getFasilitatorReports, type FasilitatorReport } from '@/lib/db'
+import { getSession, logout, getAllUsers } from '@/lib/auth'
+import { getFirestoreUsers, getFirestoreProgress, getFasilitatorReports, getForwardedDiscussions, type FasilitatorReport, type ForwardedDiscussion } from '@/lib/db'
 import type { User } from '@/types'
 
 type Section = 'dashboard' | 'data-log' | 'analisis' | 'efektivitas' | 'laporan' | 'ekspor'
@@ -13,6 +13,7 @@ export default function PenelitiPage() {
   const [session, setSession] = useState<User | null>(null)
   const [pesertaData, setPesertaData] = useState<{ user: User; xp: number; done: number; modules: number; scores: Record<string, number>; streak: number; badges: number }[]>([])
   const [reports, setReports] = useState<FasilitatorReport[]>([])
+  const [forwardedDisc, setForwardedDisc] = useState<ForwardedDiscussion[]>([])
   const [exportMsg, setExportMsg] = useState('')
   const [logoutConfirm, setLogoutConfirm] = useState(false)
 
@@ -21,7 +22,10 @@ export default function PenelitiPage() {
       const s = getSession()
       if (!s || s.role !== 'peneliti') { router.push('/login'); return }
       setSession(s)
-      const users = await getFirestoreUsers()
+      const fsUsers = await getFirestoreUsers()
+      const fsEmails = new Set(fsUsers.map(u => u.email.toLowerCase()))
+      const localUsers = getAllUsers().filter(u => !fsEmails.has(u.email.toLowerCase()))
+      const users = [...fsUsers, ...localUsers]
       const peserta = users.filter(u => u.role === 'peserta')
       const data = await Promise.all(peserta.map(async u => {
         const p = await getFirestoreProgress(u.id)
@@ -38,6 +42,8 @@ export default function PenelitiPage() {
       setPesertaData(data)
       const reps = await getFasilitatorReports()
       setReports(reps)
+      const fwd = await getForwardedDiscussions()
+      setForwardedDisc(fwd)
     }
     load()
   }, [router])
@@ -46,7 +52,7 @@ export default function PenelitiPage() {
   const doLogout = () => { logout(); router.push('/login') }
 
   const getModuleScores = () => {
-    const mods = ['m1', 'm2', 'm3']
+    const mods = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6']
     return mods.map(m => {
       const preLst = pesertaData.map(d => d.scores[`${m}_pre`] ?? null).filter(v => v !== null) as number[]
       const postLst = pesertaData.map(d => d.scores[`${m}_post`] ?? null).filter(v => v !== null) as number[]
@@ -62,7 +68,7 @@ export default function PenelitiPage() {
   const totalXP = pesertaData.reduce((s, d) => s + d.xp, 0)
   const avgXP = pesertaData.length ? Math.round(totalXP / pesertaData.length) : 0
   const avgDone = pesertaData.length ? (pesertaData.reduce((s, d) => s + d.done, 0) / pesertaData.length).toFixed(1) : 0
-  const completedAll = pesertaData.filter(d => d.modules >= 3).length
+  const completedAll = pesertaData.filter(d => d.modules >= 6).length
 
   const navItems: { id: Section; label: string; emoji: string }[] = [
     { id: 'dashboard', label: 'Dashboard Riset', emoji: '📊' },
@@ -88,13 +94,16 @@ export default function PenelitiPage() {
   }
 
   const handleExportCSV = () => {
-    const headers = ['ID', 'Nama', 'Sekolah', 'Mapel', 'XP', 'Pelajaran', 'Modul', 'Streak', 'Badge', 'Skor Pre M1', 'Skor Post M1', 'Skor Pre M2', 'Skor Post M2', 'Skor Pre M3', 'Skor Post M3']
+    const headers = ['ID', 'Nama', 'Sekolah', 'Mapel', 'XP', 'Pelajaran', 'Modul', 'Streak', 'Badge', 'Pre M1', 'Post M1', 'Pre M2', 'Post M2', 'Pre M3', 'Post M3', 'Pre M4', 'Post M4', 'Pre M5', 'Post M5', 'Pre M6', 'Post M6']
     const rows = pesertaData.map(d => [
       d.user.id, d.user.name, d.user.school || '', d.user.subject || '',
       d.xp, d.done, d.modules, d.streak, d.badges,
       d.scores['m1_pre'] ?? '', d.scores['m1_post'] ?? '',
       d.scores['m2_pre'] ?? '', d.scores['m2_post'] ?? '',
       d.scores['m3_pre'] ?? '', d.scores['m3_post'] ?? '',
+      d.scores['m4_pre'] ?? '', d.scores['m4_post'] ?? '',
+      d.scores['m5_pre'] ?? '', d.scores['m5_post'] ?? '',
+      d.scores['m6_pre'] ?? '', d.scores['m6_post'] ?? '',
     ])
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -245,7 +254,7 @@ export default function PenelitiPage() {
                 <table className="w-full text-xs min-w-[700px]">
                   <thead className="bg-slate-50 border-b border-slate-100">
                     <tr>
-                      {['ID', 'Nama', 'Sekolah', 'XP', 'Pelajaran', 'Modul', 'Streak', 'Pre M1', 'Post M1', 'Pre M2', 'Post M2', 'Pre M3', 'Post M3'].map(h => (
+                      {['ID', 'Nama', 'Sekolah', 'XP', 'Pelajaran', 'Modul', 'Streak', 'Pre M1', 'Post M1', 'Pre M2', 'Post M2', 'Pre M3', 'Post M3', 'Pre M4', 'Post M4', 'Pre M5', 'Post M5', 'Pre M6', 'Post M6'].map(h => (
                         <th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wide px-3 py-3 whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -258,7 +267,7 @@ export default function PenelitiPage() {
                         <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{d.user.school}</td>
                         <td className="px-3 py-2.5 font-bold text-primary-600">{d.xp}</td>
                         <td className="px-3 py-2.5 text-slate-600">{d.done}</td>
-                        <td className="px-3 py-2.5 text-slate-600">{d.modules}/3</td>
+                        <td className="px-3 py-2.5 text-slate-600">{d.modules}/6</td>
                         <td className="px-3 py-2.5 text-slate-600">🔥 {d.streak}</td>
                         <td className="px-3 py-2.5 text-center">{d.scores['m1_pre'] ?? '–'}</td>
                         <td className="px-3 py-2.5 text-center">{d.scores['m1_post'] ?? '–'}</td>
@@ -266,6 +275,12 @@ export default function PenelitiPage() {
                         <td className="px-3 py-2.5 text-center">{d.scores['m2_post'] ?? '–'}</td>
                         <td className="px-3 py-2.5 text-center">{d.scores['m3_pre'] ?? '–'}</td>
                         <td className="px-3 py-2.5 text-center">{d.scores['m3_post'] ?? '–'}</td>
+                        <td className="px-3 py-2.5 text-center">{d.scores['m4_pre'] ?? '–'}</td>
+                        <td className="px-3 py-2.5 text-center">{d.scores['m4_post'] ?? '–'}</td>
+                        <td className="px-3 py-2.5 text-center">{d.scores['m5_pre'] ?? '–'}</td>
+                        <td className="px-3 py-2.5 text-center">{d.scores['m5_post'] ?? '–'}</td>
+                        <td className="px-3 py-2.5 text-center">{d.scores['m6_pre'] ?? '–'}</td>
+                        <td className="px-3 py-2.5 text-center">{d.scores['m6_post'] ?? '–'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -415,6 +430,26 @@ export default function PenelitiPage() {
             <div>
               <h1 className="text-2xl font-black text-slate-900 mb-1">Laporan Fasilitator</h1>
               <p className="text-slate-500 text-sm mb-6">Laporan periodik yang dikirim oleh fasilitator program</p>
+              {forwardedDisc.length > 0 && (
+                <div className="mb-6">
+                  <h2 className="text-sm font-bold text-slate-700 mb-3">💬 Diskusi Diteruskan oleh Fasilitator ({forwardedDisc.length})</h2>
+                  <div className="space-y-3">
+                    {forwardedDisc.map((fd, i) => (
+                      <div key={fd.id ?? i} className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">{fd.title}</p>
+                            <p className="text-xs text-slate-500">{fd.userName} · {['m1','m2','m3','m4','m5','m6'].includes(fd.moduleId) ? `Modul ${fd.moduleId.slice(1)}` : fd.moduleId} · Diteruskan oleh {fd.forwardedBy}</p>
+                          </div>
+                          <span className="text-[9px] font-bold bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full flex-none">Diskusi</span>
+                        </div>
+                        <p className="text-xs text-slate-700 bg-white rounded-xl px-3 py-2 leading-relaxed">{fd.body}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {reports.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-10 text-center">
                   <p className="text-4xl mb-3">📭</p>

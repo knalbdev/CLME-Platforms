@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 320" font-family="system-ui,-apple-system,sans-serif">
+  <rect width="760" height="320" rx="16" fill="#f8fafc"/>
+
+  <!-- Title -->
+  <text x="380" y="36" text-anchor="middle" font-size="14" font-weight="800" fill="#0f172a">NIST Cybersecurity Framework 2.0</text>
+  <text x="380" y="54" text-anchor="middle" font-size="11" fill="#64748b">6 Fungsi Utama Keamanan Siber</text>
+
+  <!-- Row 1 -->
+  <!-- GOVERN -->
+  <rect x="20" y="72" width="228" height="102" rx="12" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="34" y="98" font-size="20">🏛️</text>
+  <text x="66" y="98" font-size="13" font-weight="800" fill="white">GOVERN</text>
+  <text x="66" y="113" font-size="10" fill="#94a3b8">Tata Kelola &amp; Kebijakan</text>
+  <text x="34" y="134" font-size="10" fill="#cbd5e1">Siapa bertanggung jawab</text>
+  <text x="34" y="149" font-size="10" fill="#cbd5e1">atas keamanan data sekolah?</text>
+  <text x="34" y="164" font-size="10" fill="#64748b">Kepala Sekolah menetapkan kebijakan</text>
+
+  <!-- IDENTIFY -->
+  <rect x="266" y="72" width="228" height="102" rx="12" fill="#1d4ed8" stroke="#2563eb" stroke-width="1"/>
+  <text x="280" y="98" font-size="20">🔍</text>
+  <text x="312" y="98" font-size="13" font-weight="800" fill="white">IDENTIFY</text>
+  <text x="312" y="113" font-size="10" fill="#bfdbfe">Kenali Aset &amp; Risiko</text>
+  <text x="280" y="134" font-size="10" fill="#dbeafe">Data apa saja yang dimiliki</text>
+  <text x="280" y="149" font-size="10" fill="#dbeafe">sekolah? Di mana tersimpan?</text>
+  <text x="280" y="164" font-size="10" fill="#93c5fd">Dapodik, email, nilai, absensi</text>
+
+  <!-- PROTECT -->
+  <rect x="512" y="72" width="228" height="102" rx="12" fill="#0c8568" stroke="#0d9488" stroke-width="1"/>
+  <text x="526" y="98" font-size="20">🛡️</text>
+  <text x="558" y="98" font-size="13" font-weight="800" fill="white">PROTECT</text>
+  <text x="558" y="113" font-size="10" fill="#99f6e4">Terapkan Perlindungan</text>
+  <text x="526" y="134" font-size="10" fill="#ccfbf1">Password kuat, MFA aktif,</text>
+  <text x="526" y="149" font-size="10" fill="#ccfbf1">backup rutin, pelatihan staf</text>
+  <text x="526" y="164" font-size="10" fill="#6ee7b7">Guru = implementasi PROTECT</text>
+
+  <!-- Row 2 -->
+  <!-- DETECT -->
+  <rect x="20" y="192" width="228" height="102" rx="12" fill="#7c3aed" stroke="#8b5cf6" stroke-width="1"/>
+  <text x="34" y="218" font-size="20">📡</text>
+  <text x="66" y="218" font-size="13" font-weight="800" fill="white">DETECT</text>
+  <text x="66" y="233" font-size="10" fill="#ddd6fe">Deteksi Anomali</text>
+  <text x="34" y="254" font-size="10" fill="#ede9fe">Pantau aktivitas tidak</text>
+  <text x="34" y="269" font-size="10" fill="#ede9fe">wajar di sistem sekolah</text>
+  <text x="34" y="284" font-size="10" fill="#c4b5fd">Login tengah malam = red flag</text>
+
+  <!-- RESPOND -->
+  <rect x="266" y="192" width="228" height="102" rx="12" fill="#dc2626" stroke="#ef4444" stroke-width="1"/>
+  <text x="280" y="218" font-size="20">⚡</text>
+  <text x="312" y="218" font-size="13" font-weight="800" fill="white">RESPOND</text>
+  <text x="312" y="233" font-size="10" fill="#fecaca">Respons Insiden</text>
+  <text x="280" y="254" font-size="10" fill="#fee2e2">Ada SOP jika terjadi</text>
+  <text x="280" y="269" font-size="10" fill="#fee2e2">kebocoran data?</text>
+  <text x="280" y="284" font-size="10" fill="#fca5a5">Laporkan ke Kepala Sekolah</text>
+
+  <!-- RECOVER -->
+  <rect x="512" y="192" width="228" height="102" rx="12" fill="#b45309" stroke="#d97706" stroke-width="1"/>
+  <text x="526" y="218" font-size="20">🔄</text>
+  <text x="558" y="218" font-size="13" font-weight="800" fill="white">RECOVER</text>
+  <text x="558" y="233" font-size="10" fill="#fde68a">Pulihkan &amp; Belajar</text>
+  <text x="526" y="254" font-size="10" fill="#fef3c7">Setelah insiden, pulihkan</text>
+  <text x="526" y="269" font-size="10" fill="#fef3c7">layanan &amp; evaluasi SOP</text>
+  <text x="526" y="284" font-size="10" fill="#fde68a">Insiden = pelajaran berharga</text>
+</svg>

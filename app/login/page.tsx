@@ -87,7 +87,10 @@ export default function LoginPage() {
       password: regPwd,
     })
 
-    if (result.success && result.user) {
+    if (result.error === '__PENDING__') {
+      setSuccess('Pendaftaran berhasil! Akun Anda sedang menunggu persetujuan admin atau fasilitator. Anda akan mendapat notifikasi setelah disetujui.')
+      setLoading(false)
+    } else if (result.success && result.user) {
       router.push('/peserta')
     } else {
       setError(result.error || 'Pendaftaran gagal.')

@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSession, logout, getAllUsers } from '@/lib/auth'
-import { getFirestoreUsers, saveModuleMetaToFirestore, saveFirestoreModuleLessons, getAIConfig, saveAIConfig } from '@/lib/db'
+import { getFirestoreUsers, saveModuleMetaToFirestore, saveFirestoreModuleLessons, getAIConfig, saveAIConfig, approveUser, getPendingUsers, uploadLessonImage } from '@/lib/db'
 import { getModules, saveCustomModule, updateModuleStatus } from '@/lib/data'
 import type { User, Module, Lesson, ContentSection } from '@/types'
 
@@ -44,6 +44,7 @@ export default function AdminPage() {
   const [session, setSession] = useState<User | null>(null)
   const [modules, setModules] = useState<Module[]>([])
   const [users, setUsers] = useState<User[]>([])
+  const [pendingUsers, setPendingUsers] = useState<User[]>([])
 
   // Module CRUD
   const [showModuleModal, setShowModuleModal] = useState(false)
@@ -63,6 +64,7 @@ export default function AdminPage() {
   const [editingLesson, setEditingLesson] = useState<Lesson | null>(null)
   const [showLessonModal, setShowLessonModal] = useState(false)
   const [lessonSaving, setLessonSaving] = useState(false)
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null)
 
   const [logoutConfirm, setLogoutConfirm] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
@@ -89,6 +91,9 @@ export default function AdminPage() {
       const merged = [...firestoreUsers, ...localUsers.filter(u => !firestoreEmails.has(u.email.toLowerCase()))]
       setUsers(merged)
 
+      const pending = await getPendingUsers()
+      setPendingUsers(pending)
+
       // Load AI config from Firestore
       const aiCfg = await getAIConfig()
       setAiModel(aiCfg.model)
@@ -103,6 +108,13 @@ export default function AdminPage() {
   }, [router])
 
   const flash = (msg: string) => { setSaveMsg(msg); setTimeout(() => setSaveMsg(''), 3000) }
+
+  const handleApproveUser = async (u: User) => {
+    await approveUser(u.id)
+    setPendingUsers(prev => prev.filter(p => p.id !== u.id))
+    setUsers(prev => [...prev, u])
+    flash(`Akun "${u.name}" telah disetujui.`)
+  }
 
   const testAIConnection = async () => {
     setAiTestStatus('testing')
@@ -444,6 +456,26 @@ export default function AdminPage() {
                   + Undang Peserta
                 </button>
               </div>
+
+              {pendingUsers.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-5">
+                  <h3 className="text-sm font-bold text-amber-900 mb-3">⏳ Menunggu Persetujuan ({pendingUsers.length})</h3>
+                  <div className="space-y-2">
+                    {pendingUsers.map(u => (
+                      <div key={u.id} className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-amber-100">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800">{u.name}</p>
+                          <p className="text-xs text-slate-500">{u.email} · {u.school}</p>
+                        </div>
+                        <button onClick={() => handleApproveUser(u)}
+                          className="bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold px-4 py-1.5 rounded-lg transition">
+                          Setujui
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <table className="w-full text-sm">
@@ -1036,18 +1068,59 @@ export default function AdminPage() {
                         <div className="flex items-center gap-2">
                           <select value={sec.type} onChange={e => updateSection(idx, 'type', e.target.value)}
                             className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-primary-500 bg-white">
-                            {['intro', 'text', 'case', 'stat', 'warning', 'tip'].map(t => (
+                            {['intro', 'text', 'case', 'stat', 'warning', 'tip', 'image'].map(t => (
                               <option key={t} value={t}>{t}</option>
                             ))}
                           </select>
-                          <input value={sec.title ?? ''} onChange={e => updateSection(idx, 'title', e.target.value)}
-                            placeholder="Judul (opsional)"
-                            className="flex-1 border border-slate-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-primary-500" />
+                          {sec.type !== 'image' && (
+                            <input value={sec.title ?? ''} onChange={e => updateSection(idx, 'title', e.target.value)}
+                              placeholder="Judul (opsional)"
+                              className="flex-1 border border-slate-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-primary-500" />
+                          )}
                           <button onClick={() => removeSection(idx)} className="text-red-400 hover:text-red-600 text-xs font-bold px-2 py-1.5 rounded-lg hover:bg-red-50 transition">✕</button>
                         </div>
-                        <textarea value={sec.text} onChange={e => updateSection(idx, 'text', e.target.value)}
-                          rows={3} placeholder="Teks konten seksi (mendukung HTML)"
-                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-primary-500 resize-none font-mono" />
+
+                        {sec.type === 'image' ? (
+                          <div className="space-y-2">
+                            {sec.src && (
+                              <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+                                <img src={sec.src} alt={sec.alt || ''} className="w-full max-h-40 object-contain" />
+                                <button onClick={() => updateSection(idx, 'src', '')}
+                                  className="absolute top-1.5 right-1.5 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full hover:bg-red-600 transition">
+                                  Hapus
+                                </button>
+                              </div>
+                            )}
+                            <label className={`flex items-center gap-2 justify-center w-full border-2 border-dashed rounded-lg px-3 py-3 text-xs font-semibold cursor-pointer transition ${uploadingIdx === idx ? 'border-primary-300 bg-primary-50 text-primary-600' : 'border-slate-300 text-slate-500 hover:border-primary-400 hover:text-primary-600 hover:bg-primary-50'}`}>
+                              <input type="file" accept="image/*" className="hidden" disabled={uploadingIdx !== null}
+                                onChange={async e => {
+                                  const file = e.target.files?.[0]
+                                  if (!file) return
+                                  setUploadingIdx(idx)
+                                  try {
+                                    const url = await uploadLessonImage(file, lessonModuleId)
+                                    updateSection(idx, 'src', url)
+                                  } catch {
+                                    alert('Upload gagal. Coba lagi.')
+                                  } finally {
+                                    setUploadingIdx(null)
+                                    e.target.value = ''
+                                  }
+                                }} />
+                              {uploadingIdx === idx ? '⏳ Mengupload…' : (sec.src ? '🔄 Ganti Gambar' : '📁 Upload Gambar')}
+                            </label>
+                            <input value={sec.alt ?? ''} onChange={e => updateSection(idx, 'alt', e.target.value)}
+                              placeholder="Alt text / deskripsi gambar (aksesibilitas)"
+                              className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-primary-500" />
+                            <input value={sec.caption ?? ''} onChange={e => updateSection(idx, 'caption', e.target.value)}
+                              placeholder="Caption gambar (opsional — ditampilkan di bawah gambar)"
+                              className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-primary-500" />
+                          </div>
+                        ) : (
+                          <textarea value={sec.text ?? ''} onChange={e => updateSection(idx, 'text', e.target.value)}
+                            rows={3} placeholder="Teks konten seksi (mendukung HTML)"
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-primary-500 resize-none font-mono" />
+                        )}
                       </div>
                     ))}
                     {(editingLesson.content.sections ?? []).length === 0 && (
